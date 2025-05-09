@@ -31,7 +31,7 @@ const registerSchema = z.object({
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 const Register = () => {
-  const { signUp } = useAuth();
+  const { signUp, user } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -45,14 +45,19 @@ const Register = () => {
     },
   });
 
+  // Redirecionar para o dashboard se já estiver logado
+  if (user) {
+    navigate('/dashboard');
+    return null;
+  }
+
   const onSubmit = async (data: RegisterFormValues) => {
     try {
       setIsLoading(true);
       await signUp(data.email, data.password, data.fullName);
-      navigate('/dashboard');
+      // Não é necessário usar navigate aqui pois o signUp já redireciona
     } catch (error) {
       console.error(error);
-    } finally {
       setIsLoading(false);
     }
   };

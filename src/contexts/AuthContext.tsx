@@ -1,6 +1,6 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, cleanupAuthState } from '../lib/supabase';
 import { User } from '../types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -21,6 +21,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Configurar listener de mudança de estado de autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          // Usar setTimeout para prevenir deadlocks
+          setTimeout(async () => {
+            try {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
+              
+              if (profile) {
+                setUser({
+                  id: session.user.id,
+                  email: session.user.email!,
+                  created_at: session.user.created_at,
+                  fullName: profile.fullName,
+                  phone: profile.phone,
+                  planType: profile.planType as "free" | "pro",
+                  planStartDate: profile.planStartDate,
+                });
+              }
+            } catch (error) {
+              console.error('Error fetching user profile:', error);
+            }
+          }, 0);
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    // Verificar sessão atual
     const getSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -53,33 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     getSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          if (profile) {
-            setUser({
-              id: session.user.id,
-              email: session.user.email!,
-              created_at: session.user.created_at,
-              fullName: profile.fullName,
-              phone: profile.phone,
-              planType: profile.planType as "free" | "pro",
-              planStartDate: profile.planStartDate,
-            });
-          }
-        } else {
-          setUser(null);
-        }
-        setLoading(false);
-      }
-    );
-
     return () => {
       subscription.unsubscribe();
     };
@@ -88,9 +97,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
       setLoading(true);
+      // Limpar estado de auth anterior
+      cleanupAuthState();
+      
+      // Tentar logout global para evitar conflitos
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Continuar mesmo se falhar
+      }
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName, // Salva nos metadados
+          }
+        }
       });
 
       if (error) {
@@ -98,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.user) {
-        // Create profile for new user
+        // Criar perfil para novo usuário
         const { error: profileError } = await supabase.from('profiles').insert({
           id: data.user.id,
           email,
@@ -108,13 +132,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (profileError) {
-          throw profileError;
+          console.error('Error creating profile:', profileError);
+          if (profileError.message.includes('fullName')) {
+            // Tentar com "fullname" minúsculo
+            const { error: retryError } = await supabase.from('profiles').insert({
+              id: data.user.id,
+              email,
+              fullname: fullName, // Tentar com "fullname" minúsculo
+              planType: 'free',
+              planStartDate: new Date().toISOString(),
+            });
+            
+            if (retryError) throw retryError;
+          } else {
+            throw profileError;
+          }
         }
 
         toast({
           title: 'Conta criada com sucesso',
           description: 'Bem-vindo ao Saldus!',
         });
+        
+        // Recarregar a página para garantir estado limpo
+        window.location.href = '/dashboard';
       }
     } catch (error: any) {
       toast({
@@ -131,6 +172,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
+      // Limpar estado de auth anterior
+      cleanupAuthState();
+      
+      // Tentar logout global para evitar conflitos
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Continuar mesmo se falhar
+      }
+      
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -144,6 +195,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         title: 'Login realizado com sucesso',
         description: 'Bem-vindo de volta!',
       });
+      
+      // Recarregar a página para garantir estado limpo
+      window.location.href = '/dashboard';
     } catch (error: any) {
       toast({
         title: 'Erro ao fazer login',
@@ -159,11 +213,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true);
+      // Limpar estado de auth primeiro
+      cleanupAuthState();
+      
       await supabase.auth.signOut();
       setUser(null);
+      
       toast({
         title: 'Logout realizado com sucesso',
       });
+      
+      // Recarregar a página para garantir estado limpo
+      window.location.href = '/login';
     } catch (error: any) {
       toast({
         title: 'Erro ao fazer logout',
@@ -180,12 +241,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!user) throw new Error('Usuário não autenticado');
       
       setLoading(true);
-      const { error } = await supabase
-        .from('profiles')
-        .update(data)
-        .eq('id', user.id);
+      
+      // Verificar caso o campo seja fullName ou fullname
+      const updateData = { ...data };
+      
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update(updateData)
+          .eq('id', user.id);
 
-      if (error) throw error;
+        if (error) {
+          // Se o erro for relacionado ao campo fullName, tentar com fullname
+          if (error.message.includes('fullName') && 'fullName' in updateData) {
+            const { fullName, ...rest } = updateData;
+            const alternativeUpdate = {
+              ...rest,
+              fullname: fullName // Tentar com fullname minúsculo
+            };
+            
+            const { error: retryError } = await supabase
+              .from('profiles')
+              .update(alternativeUpdate)
+              .eq('id', user.id);
+              
+            if (retryError) throw retryError;
+          } else {
+            throw error;
+          }
+        }
+      } catch (e: any) {
+        // Se ainda falhar, tentar um approach alternativo checando o schema primeiro
+        const { data: columns } = await supabase
+          .from('profiles')
+          .select('*')
+          .limit(1);
+          
+        const columnExists = columns && columns.length > 0 
+          ? Object.keys(columns[0]).some(col => col.toLowerCase() === 'fullname')
+          : false;
+        
+        const fieldName = columnExists ? 'fullname' : 'fullName';
+        const { fullName, ...rest } = updateData;
+        
+        const finalUpdate = {
+          ...rest,
+          [fieldName]: fullName // Usar o campo correto baseado na verificação
+        };
+        
+        const { error } = await supabase
+          .from('profiles')
+          .update(finalUpdate)
+          .eq('id', user.id);
+          
+        if (error) throw error;
+      }
 
       setUser({ ...user, ...data });
       toast({

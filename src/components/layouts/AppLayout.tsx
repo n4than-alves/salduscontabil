@@ -33,7 +33,7 @@ const AppLayout = ({ children, requiredAuth = true }: AppLayoutProps) => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex min-h-screen flex-col md:flex-row bg-gray-50">
       {user && <Sidebar />}
       <main className="flex-1 overflow-auto p-4 md:p-6">
         <div className="mx-auto max-w-7xl">{children}</div>

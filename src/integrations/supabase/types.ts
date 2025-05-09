@@ -9,13 +9,163 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      clients: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      login_history: {
+        Row: {
+          id: string
+          ip_address: string | null
+          login_at: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          ip_address?: string | null
+          login_at?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          ip_address?: string | null
+          login_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          address: string | null
+          commercialphone: string | null
+          companyname: string | null
+          created_at: string | null
+          email: string | null
+          fullname: string | null
+          id: string
+          phone: string | null
+          planexpirydate: string | null
+          planstartdate: string | null
+          plantype: string | null
+          theme: string | null
+        }
+        Insert: {
+          address?: string | null
+          commercialphone?: string | null
+          companyname?: string | null
+          created_at?: string | null
+          email?: string | null
+          fullname?: string | null
+          id: string
+          phone?: string | null
+          planexpirydate?: string | null
+          planstartdate?: string | null
+          plantype?: string | null
+          theme?: string | null
+        }
+        Update: {
+          address?: string | null
+          commercialphone?: string | null
+          companyname?: string | null
+          created_at?: string | null
+          email?: string | null
+          fullname?: string | null
+          id?: string
+          phone?: string | null
+          planexpirydate?: string | null
+          planstartdate?: string | null
+          plantype?: string | null
+          theme?: string | null
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          category: string
+          client_id: string | null
+          created_at: string | null
+          date: string
+          description: string
+          id: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          client_id?: string | null
+          created_at?: string | null
+          date: string
+          description: string
+          id?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          client_id?: string | null
+          created_at?: string | null
+          date?: string
+          description?: string
+          id?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      can_create_transaction: {
+        Args: { user_uuid: string }
+        Returns: boolean
+      }
+      get_weekly_transactions_limit: {
+        Args: { user_uuid: string }
+        Returns: {
+          transaction_count: number
+          weekly_limit: number
+          can_create: boolean
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

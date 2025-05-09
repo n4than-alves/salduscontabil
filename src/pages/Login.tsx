@@ -26,7 +26,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 const Login = () => {
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -38,14 +38,19 @@ const Login = () => {
     },
   });
 
+  // Redirecionar para o dashboard se já estiver logado
+  if (user) {
+    navigate('/dashboard');
+    return null;
+  }
+
   const onSubmit = async (data: LoginFormValues) => {
     try {
       setIsLoading(true);
       await signIn(data.email, data.password);
-      navigate('/dashboard');
+      // Não é necessário usar navigate aqui pois o signIn já redireciona
     } catch (error) {
       console.error(error);
-    } finally {
       setIsLoading(false);
     }
   };

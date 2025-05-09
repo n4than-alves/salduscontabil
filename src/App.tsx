@@ -14,7 +14,14 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 // Initialize QueryClient for React Query
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30000,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/layouts/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -25,10 +25,14 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2, CreditCard, CheckCircle, User } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 const profileSchema = z.object({
   fullName: z.string().min(3, 'Nome completo deve ter no mínimo 3 caracteres'),
-  phone: z.string().optional().or(z.literal(''))
+  phone: z.string().optional().or(z.literal('')),
+  companyName: z.string().optional().or(z.literal('')),
+  commercialPhone: z.string().optional().or(z.literal('')),
+  address: z.string().optional().or(z.literal(''))
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -37,24 +41,90 @@ const Settings = () => {
   const { user, updateProfile } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [profileData, setProfileData] = useState<any>(null);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       fullName: user?.fullName || '',
       phone: user?.phone || '',
+      companyName: '',
+      commercialPhone: '',
+      address: ''
     },
   });
+
+  useEffect(() => {
+    const loadFullProfile = async () => {
+      if (!user) return;
+      
+      try {
+        setIsLoading(true);
+        // Carregar todos os dados do perfil
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error loading profile:', error);
+          return;
+        }
+
+        if (data) {
+          setProfileData(data);
+          
+          // Determinar o nome correto do campo (fullName ou fullname)
+          const fullNameField = data.fullName !== undefined ? 'fullName' : 'fullname';
+          
+          form.reset({
+            fullName: data[fullNameField] || '',
+            phone: data.phone || '',
+            companyName: data.companyName || '',
+            commercialPhone: data.commercialPhone || '',
+            address: data.address || ''
+          });
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFullProfile();
+  }, [user, form]);
 
   const onSubmit = async (data: ProfileFormValues) => {
     if (!user) return;
 
     setIsLoading(true);
     try {
+      // Atualizar os dados básicos através do contexto de auth
       await updateProfile({
         fullName: data.fullName,
         phone: data.phone || null,
       });
+      
+      // Determinar o nome correto do campo (fullName ou fullname)
+      const fullNameField = profileData && profileData.fullName !== undefined ? 'fullName' : 'fullname';
+      
+      // Atualizar campos adicionais diretamente
+      const updateData = {
+        [fullNameField]: data.fullName,
+        phone: data.phone || null,
+        companyName: data.companyName || null,
+        commercialPhone: data.commercialPhone || null,
+        address: data.address || null
+      };
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', user.id);
+        
+      if (error) throw error;
       
       toast({
         title: 'Perfil atualizado',
@@ -62,6 +132,11 @@ const Settings = () => {
       });
     } catch (error) {
       console.error('Error updating profile:', error);
+      toast({
+        title: 'Erro ao atualizar perfil',
+        description: 'Ocorreu um erro ao salvar suas informações. Tente novamente.',
+        variant: 'destructive'
+      });
     } finally {
       setIsLoading(false);
     }
@@ -86,52 +161,97 @@ const Settings = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="fullName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome Completo</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Telefone</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormItem>
-                  <FormLabel>E-mail</FormLabel>
-                  <FormControl>
-                    <Input value={user?.email} disabled />
-                  </FormControl>
-                </FormItem>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    'Salvar Alterações'
-                  )}
-                </Button>
-              </form>
-            </Form>
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-saldus-600" />
+              </div>
+            ) : (
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="fullName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nome Completo</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Telefone Pessoal</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="companyName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nome da Empresa</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="commercialPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Telefone Comercial</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Endereço</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormItem>
+                    <FormLabel>E-mail</FormLabel>
+                    <FormControl>
+                      <Input value={user?.email} disabled />
+                    </FormControl>
+                  </FormItem>
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      'Salvar Alterações'
+                    )}
+                  </Button>
+                </form>
+              </Form>
+            )}
           </CardContent>
         </Card>
 
