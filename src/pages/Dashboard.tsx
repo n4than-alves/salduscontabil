@@ -1,13 +1,16 @@
-
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/layouts/AppLayout';
 import StatCard from '@/components/dashboard/StatCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowUp, ArrowDown, Coins, Calendar } from 'lucide-react';
+import { ArrowUp, ArrowDown, Coins, Calendar, Activity } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface DashboardData {
   totalIncome: number;
@@ -31,6 +34,8 @@ const Dashboard = () => {
     weeklyTransactionLimit: 5,
     canCreateTransactions: true
   });
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -100,6 +105,11 @@ const Dashboard = () => {
         });
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        toast({
+          title: 'Erro ao carregar o dashboard',
+          description: 'Tente novamente mais tarde.',
+          variant: 'destructive',
+        });
       } finally {
         setLoading(false);
       }

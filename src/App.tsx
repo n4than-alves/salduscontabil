@@ -13,6 +13,7 @@ import Transactions from "./pages/Transactions";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
+// Initialize QueryClient for React Query
 const queryClient = new QueryClient();
 
 const App = () => (

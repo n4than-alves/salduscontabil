@@ -37,7 +37,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: session.user.id,
               email: session.user.email!,
               created_at: session.user.created_at,
-              ...profile,
+              fullName: profile.fullName,
+              phone: profile.phone,
+              planType: profile.planType as "free" | "pro",
+              planStartDate: profile.planStartDate,
             });
           }
         }
@@ -64,7 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: session.user.id,
               email: session.user.email!,
               created_at: session.user.created_at,
-              ...profile,
+              fullName: profile.fullName,
+              phone: profile.phone,
+              planType: profile.planType as "free" | "pro",
+              planStartDate: profile.planStartDate,
             });
           }
         } else {
