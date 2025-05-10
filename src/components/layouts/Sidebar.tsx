@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useMediaQuery } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const NavItem = ({
   to,
@@ -44,7 +44,7 @@ const NavItem = ({
 const Sidebar = () => {
   const location = useLocation();
   const { user, signOut } = useAuth();
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useIsMobile();
   const [isOpen, setIsOpen] = useState(false);
 
   // Fechar sidebar automaticamente em dispositivos móveis após navegação
