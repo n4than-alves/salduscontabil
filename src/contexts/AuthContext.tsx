@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, cleanupAuthState } from '../lib/supabase';
 import { User } from '../types';
@@ -39,10 +38,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   id: session.user.id,
                   email: session.user.email!,
                   created_at: session.user.created_at,
-                  fullName: profile.fullName,
+                  fullName: profile.fullname || profile.fullName,
                   phone: profile.phone,
-                  planType: profile.planType as "free" | "pro",
-                  planStartDate: profile.planStartDate,
+                  planType: (profile.plantype || profile.planType) as "free" | "pro",
+                  planStartDate: profile.planstartdate || profile.planStartDate,
                 });
               }
             } catch (error) {
@@ -73,10 +72,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: session.user.id,
               email: session.user.email!,
               created_at: session.user.created_at,
-              fullName: profile.fullName,
+              fullName: profile.fullname || profile.fullName,
               phone: profile.phone,
-              planType: profile.planType as "free" | "pro",
-              planStartDate: profile.planStartDate,
+              planType: (profile.plantype || profile.planType) as "free" | "pro",
+              planStartDate: profile.planstartdate || profile.planStartDate,
             });
           }
         }
@@ -242,8 +241,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       setLoading(true);
       
-      // Verificar caso o campo seja fullName ou fullname
-      const updateData = { ...data };
+      // Converter os nomes dos campos para o formato do banco de dados
+      const updateData: Record<string, any> = {};
+      
+      if (data.fullName !== undefined) {
+        updateData.fullname = data.fullName;
+      }
+      
+      if (data.phone !== undefined) {
+        updateData.phone = data.phone;
+      }
+      
+      if (data.planType !== undefined) {
+        updateData.plantype = data.planType;
+      }
+      
+      if (data.planStartDate !== undefined) {
+        updateData.planstartdate = data.planStartDate;
+      }
       
       try {
         const { error } = await supabase
@@ -251,56 +266,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .update(updateData)
           .eq('id', user.id);
 
-        if (error) {
-          // Se o erro for relacionado ao campo fullName, tentar com fullname
-          if (error.message.includes('fullName') && 'fullName' in updateData) {
-            const { fullName, ...rest } = updateData;
-            const alternativeUpdate = {
-              ...rest,
-              fullname: fullName // Tentar com fullname minúsculo
-            };
-            
-            const { error: retryError } = await supabase
-              .from('profiles')
-              .update(alternativeUpdate)
-              .eq('id', user.id);
-              
-            if (retryError) throw retryError;
-          } else {
-            throw error;
-          }
-        }
-      } catch (e: any) {
-        // Se ainda falhar, tentar um approach alternativo checando o schema primeiro
-        const { data: columns } = await supabase
-          .from('profiles')
-          .select('*')
-          .limit(1);
-          
-        const columnExists = columns && columns.length > 0 
-          ? Object.keys(columns[0]).some(col => col.toLowerCase() === 'fullname')
-          : false;
-        
-        const fieldName = columnExists ? 'fullname' : 'fullName';
-        const { fullName, ...rest } = updateData;
-        
-        const finalUpdate = {
-          ...rest,
-          [fieldName]: fullName // Usar o campo correto baseado na verificação
-        };
-        
-        const { error } = await supabase
-          .from('profiles')
-          .update(finalUpdate)
-          .eq('id', user.id);
-          
         if (error) throw error;
+        
+        setUser({ ...user, ...data });
+        toast({
+          title: 'Perfil atualizado com sucesso',
+        });
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao atualizar perfil',
+          description: error.message,
+          variant: 'destructive',
+        });
+        throw error;
+      } finally {
+        setLoading(false);
       }
-
-      setUser({ ...user, ...data });
-      toast({
-        title: 'Perfil atualizado com sucesso',
-      });
     } catch (error: any) {
       toast({
         title: 'Erro ao atualizar perfil',

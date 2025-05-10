@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   email: string;
@@ -43,4 +44,20 @@ export interface ExtendedUser extends User {
   companyName?: string;
   commercialPhone?: string;
   address?: string;
+}
+
+// Interface para corresponder ao formato dos dados retornados pelo Supabase
+export interface SupabaseProfile {
+  id: string;
+  created_at: string | null;
+  email: string | null;
+  fullname: string | null;
+  phone: string | null;
+  plantype: string | null;
+  planstartdate: string | null;
+  companyname: string | null;
+  commercialphone: string | null;
+  address: string | null;
+  planexpirydate: string | null;
+  theme: string | null;
 }
