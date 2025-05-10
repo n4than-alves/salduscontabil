@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -151,7 +152,7 @@ const Dashboard = () => {
               className="border-l-4 border-green-400"
             />
             <StatCard
-              title="Despesas do Mês"
+              title="Balanço Total"
               value={formatCurrency(data.totalExpense)}
               icon={<ArrowDown className="h-4 w-4" />}
               className="border-l-4 border-red-400"
@@ -235,84 +236,86 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Seu Plano</CardTitle>
-            <CardDescription>
-              {user?.planType === 'pro' 
-                ? 'Você possui o Plano Pro com transações ilimitadas'
-                : 'Plano Gratuito com limite de transações semanais'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-40" />
-            ) : (
-              <div className="space-y-4">
-                <div className="rounded-lg bg-blue-50 p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="h-5 w-5 text-saldus-700" />
-                      <h3 className="font-medium text-saldus-700">
-                        {user?.planType === 'pro' ? 'Plano Pro' : 'Plano Gratuito'}
-                      </h3>
+        {user?.planType !== 'pro' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Seu Plano</CardTitle>
+              <CardDescription>
+                {user?.planType === 'pro' 
+                  ? 'Você possui o Plano Pro com transações ilimitadas'
+                  : 'Plano Gratuito com limite de transações semanais'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <Skeleton className="h-40" />
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-lg bg-blue-50 p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="h-5 w-5 text-saldus-700" />
+                        <h3 className="font-medium text-saldus-700">
+                          {user?.planType === 'pro' ? 'Plano Pro' : 'Plano Gratuito'}
+                        </h3>
+                      </div>
+                      {user?.planType === 'pro' && (
+                        <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
+                          Ativo
+                        </span>
+                      )}
                     </div>
-                    {user?.planType === 'pro' && (
-                      <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
-                        Ativo
-                      </span>
+                    {user?.planType === 'free' ? (
+                      <div>
+                        <div className="mb-1 flex justify-between text-sm">
+                          <span>Transações usadas esta semana</span>
+                          <span className="font-medium">
+                            {data.weeklyTransactionCount} / {data.weeklyTransactionLimit}
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                          <div
+                            className={cn(
+                              'h-full bg-saldus-600',
+                              data.canCreateTransactions
+                                ? ''
+                                : 'bg-red-500'
+                            )}
+                            style={{
+                              width: `${Math.min(
+                                (data.weeklyTransactionCount / data.weeklyTransactionLimit) * 100,
+                                100
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="mt-2 text-sm text-gray-600">
+                          {data.canCreateTransactions
+                            ? `Você ainda pode adicionar ${
+                                data.weeklyTransactionLimit - data.weeklyTransactionCount
+                              } transações esta semana.`
+                            : 'Você atingiu o limite de transações desta semana.'}
+                        </p>
+                        <p className="mt-2 text-sm font-medium text-saldus-700">
+                          Atualize para o Plano Pro por R$40/mês e tenha transações ilimitadas!
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm text-gray-600">
+                          Você tem acesso a transações ilimitadas e todos os recursos da plataforma.
+                        </p>
+                        <p className="mt-2 text-sm font-medium text-saldus-700">
+                          Assinatura: R$40/mês
+                        </p>
+                      </div>
                     )}
                   </div>
-                  {user?.planType === 'free' ? (
-                    <div>
-                      <div className="mb-1 flex justify-between text-sm">
-                        <span>Transações usadas esta semana</span>
-                        <span className="font-medium">
-                          {data.weeklyTransactionCount} / {data.weeklyTransactionLimit}
-                        </span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-                        <div
-                          className={cn(
-                            'h-full bg-saldus-600',
-                            data.canCreateTransactions
-                              ? ''
-                              : 'bg-red-500'
-                          )}
-                          style={{
-                            width: `${Math.min(
-                              (data.weeklyTransactionCount / data.weeklyTransactionLimit) * 100,
-                              100
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      <p className="mt-2 text-sm text-gray-600">
-                        {data.canCreateTransactions
-                          ? `Você ainda pode adicionar ${
-                              data.weeklyTransactionLimit - data.weeklyTransactionCount
-                            } transações esta semana.`
-                          : 'Você atingiu o limite de transações desta semana.'}
-                      </p>
-                      <p className="mt-2 text-sm font-medium text-saldus-700">
-                        Atualize para o Plano Pro por R$40/mês e tenha transações ilimitadas!
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-sm text-gray-600">
-                        Você tem acesso a transações ilimitadas e todos os recursos da plataforma.
-                      </p>
-                      <p className="mt-2 text-sm font-medium text-saldus-700">
-                        Assinatura: R$40/mês
-                      </p>
-                    </div>
-                  )}
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AppLayout>
   );

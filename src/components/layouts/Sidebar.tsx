@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   X,
+  BarChart,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -80,6 +81,12 @@ const Sidebar = () => {
       icon: CreditCard,
       label: 'Movimentações',
       active: location.pathname === '/transactions',
+    },
+    {
+      to: '/reports',
+      icon: BarChart,
+      label: 'Relatórios',
+      active: location.pathname === '/reports',
     },
     {
       to: '/settings',
