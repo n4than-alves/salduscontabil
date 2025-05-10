@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, cleanupAuthState } from '../lib/supabase';
-import { User } from '../types';
+import { User, SupabaseProfile } from '../types';
 import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
@@ -34,14 +34,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .single();
               
               if (profile) {
+                const profileData = profile as SupabaseProfile;
                 setUser({
                   id: session.user.id,
                   email: session.user.email!,
                   created_at: session.user.created_at,
-                  fullName: profile.fullname || profile.fullName,
-                  phone: profile.phone,
-                  planType: (profile.plantype || profile.planType) as "free" | "pro",
-                  planStartDate: profile.planstartdate || profile.planStartDate,
+                  fullName: profileData.fullname || '',
+                  phone: profileData.phone || null,
+                  planType: (profileData.plantype as 'free' | 'pro') || 'free',
+                  planStartDate: profileData.planstartdate || null,
                 });
               }
             } catch (error) {
@@ -68,14 +69,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .single();
           
           if (profile) {
+            const profileData = profile as SupabaseProfile;
             setUser({
               id: session.user.id,
               email: session.user.email!,
               created_at: session.user.created_at,
-              fullName: profile.fullname || profile.fullName,
-              phone: profile.phone,
-              planType: (profile.plantype || profile.planType) as "free" | "pro",
-              planStartDate: profile.planstartdate || profile.planStartDate,
+              fullName: profileData.fullname || '',
+              phone: profileData.phone || null,
+              planType: (profileData.plantype as 'free' | 'pro') || 'free',
+              planStartDate: profileData.planstartdate || null,
             });
           }
         }
@@ -125,27 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { error: profileError } = await supabase.from('profiles').insert({
           id: data.user.id,
           email,
-          fullName,
-          planType: 'free',
-          planStartDate: new Date().toISOString(),
+          fullname: fullName,
+          plantype: 'free',
+          planstartdate: new Date().toISOString(),
         });
 
         if (profileError) {
           console.error('Error creating profile:', profileError);
-          if (profileError.message.includes('fullName')) {
-            // Tentar com "fullname" minúsculo
-            const { error: retryError } = await supabase.from('profiles').insert({
-              id: data.user.id,
-              email,
-              fullname: fullName, // Tentar com "fullname" minúsculo
-              planType: 'free',
-              planStartDate: new Date().toISOString(),
-            });
-            
-            if (retryError) throw retryError;
-          } else {
-            throw profileError;
-          }
+          throw profileError;
         }
 
         toast({
