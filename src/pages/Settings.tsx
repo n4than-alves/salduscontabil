@@ -27,7 +27,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2, CreditCard, CheckCircle, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
-// Ampliamos o schema para incluir os novos campos adicionados no SQL
+// Schema para validar os dados do formulário
 const profileSchema = z.object({
   fullName: z.string().min(3, 'Nome completo deve ter no mínimo 3 caracteres'),
   phone: z.string().optional().or(z.literal('')),
@@ -38,26 +38,27 @@ const profileSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
-// Tipo expandido para incluir os novos campos
-interface ExtendedProfile {
+// Interface da estrutura de dados real que vem do Supabase
+interface SupabaseProfile {
   id: string;
-  created_at: string;
-  email: string;
-  fullName?: string | null;
-  fullname?: string | null; // Suporte para ambos os formatos de nome
-  phone?: string | null;
-  planType: string;
-  planStartDate?: string | null;
-  companyName?: string | null;
-  commercialPhone?: string | null;
-  address?: string | null;
+  created_at: string | null;
+  email: string | null;
+  fullname: string | null;
+  phone: string | null;
+  plantype: string | null;
+  planstartdate: string | null;
+  companyname: string | null;
+  commercialphone: string | null;
+  address: string | null;
+  theme: string | null;
+  planexpirydate: string | null;
 }
 
 const Settings = () => {
   const { user, updateProfile } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [profileData, setProfileData] = useState<ExtendedProfile | null>(null);
+  const [profileData, setProfileData] = useState<SupabaseProfile | null>(null);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -89,16 +90,14 @@ const Settings = () => {
         }
 
         if (data) {
-          setProfileData(data as ExtendedProfile);
+          setProfileData(data as SupabaseProfile);
           
-          // Determinar o nome correto do campo (fullName ou fullname)
-          const fullNameValue = data.fullName !== undefined ? data.fullName : data.fullname;
-          
+          // Preencher o formulário com os dados do perfil
           form.reset({
-            fullName: fullNameValue || '',
+            fullName: data.fullname || '',
             phone: data.phone || '',
-            companyName: data.companyName || '',
-            commercialPhone: data.commercialPhone || '',
+            companyName: data.companyname || '',
+            commercialPhone: data.commercialphone || '',
             address: data.address || ''
           });
         }
@@ -123,15 +122,12 @@ const Settings = () => {
         phone: data.phone || null,
       });
       
-      // Determinar o nome correto do campo (fullName ou fullname)
-      const fullNameField = profileData && profileData.fullName !== undefined ? 'fullName' : 'fullname';
-      
       // Atualizar campos adicionais diretamente
-      const updateData: Record<string, any> = {
-        [fullNameField]: data.fullName,
+      const updateData = {
+        fullname: data.fullName,
         phone: data.phone || null,
-        companyName: data.companyName || null,
-        commercialPhone: data.commercialPhone || null,
+        companyname: data.companyName || null,
+        commercialphone: data.commercialPhone || null,
         address: data.address || null
       };
       

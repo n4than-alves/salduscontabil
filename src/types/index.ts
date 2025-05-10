@@ -1,4 +1,3 @@
-
 export interface User {
   id: string;
   email: string;
@@ -38,4 +37,10 @@ export interface WeeklyTransactionsLimit {
   count: number;
   limit: number;
   canCreate: boolean;
+}
+
+export interface ExtendedUser extends User {
+  companyName?: string;
+  commercialPhone?: string;
+  address?: string;
 }

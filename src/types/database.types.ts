@@ -13,30 +13,45 @@ export interface Database {
       profiles: {
         Row: {
           id: string
-          created_at: string
-          email: string
-          fullName: string | null
+          created_at: string | null
+          email: string | null
+          fullname: string | null
           phone: string | null
-          planType: string
-          planStartDate: string | null
+          plantype: string | null
+          planstartdate: string | null
+          companyname: string | null
+          commercialphone: string | null
+          address: string | null
+          planexpirydate: string | null
+          theme: string | null
         }
         Insert: {
           id: string
-          created_at?: string
-          email?: string
-          fullName?: string | null
+          created_at?: string | null
+          email?: string | null
+          fullname?: string | null
           phone?: string | null
-          planType?: string
-          planStartDate?: string | null
+          plantype?: string | null
+          planstartdate?: string | null
+          companyname?: string | null
+          commercialphone?: string | null
+          address?: string | null
+          planexpirydate?: string | null
+          theme?: string | null
         }
         Update: {
           id?: string
-          created_at?: string
-          email?: string
-          fullName?: string | null
+          created_at?: string | null
+          email?: string | null
+          fullname?: string | null
           phone?: string | null
-          planType?: string
-          planStartDate?: string | null
+          plantype?: string | null
+          planstartdate?: string | null
+          companyname?: string | null
+          commercialphone?: string | null
+          address?: string | null
+          planexpirydate?: string | null
+          theme?: string | null
         }
         Relationships: [
           {
@@ -50,27 +65,30 @@ export interface Database {
       clients: {
         Row: {
           id: string
-          created_at: string
+          created_at: string | null
           user_id: string
           name: string
           email: string | null
           phone: string | null
+          notes: string | null
         }
         Insert: {
           id?: string
-          created_at?: string
+          created_at?: string | null
           user_id: string
           name: string
           email?: string | null
           phone?: string | null
+          notes?: string | null
         }
         Update: {
           id?: string
-          created_at?: string
+          created_at?: string | null
           user_id?: string
           name?: string
           email?: string | null
           phone?: string | null
+          notes?: string | null
         }
         Relationships: [
           {
@@ -84,7 +102,7 @@ export interface Database {
       transactions: {
         Row: {
           id: string
-          created_at: string
+          created_at: string | null
           user_id: string
           client_id: string | null
           amount: number
@@ -95,7 +113,7 @@ export interface Database {
         }
         Insert: {
           id?: string
-          created_at?: string
+          created_at?: string | null
           user_id: string
           client_id?: string | null
           amount: number
@@ -106,7 +124,7 @@ export interface Database {
         }
         Update: {
           id?: string
-          created_at?: string
+          created_at?: string | null
           user_id?: string
           client_id?: string | null
           amount?: number
