@@ -112,7 +112,7 @@ const Transactions = () => {
       category: '',
       description: '',
       date: new Date().toISOString().split('T')[0],
-      client_id: undefined,
+      client_id: 'none',
     },
   });
 
@@ -218,7 +218,7 @@ const Transactions = () => {
         category: transaction.category,
         description: transaction.description,
         date: new Date(transaction.date).toISOString().split('T')[0],
-        client_id: transaction.client_id,
+        client_id: transaction.client_id || 'none',
       });
     } else {
       setEditingTransaction(null);
@@ -228,7 +228,7 @@ const Transactions = () => {
         category: '',
         description: '',
         date: new Date().toISOString().split('T')[0],
-        client_id: undefined,
+        client_id: 'none',
       });
     }
     setOpenDialog(true);
@@ -256,7 +256,7 @@ const Transactions = () => {
         category: data.category,
         description: data.description,
         date: data.date,
-        client_id: data.client_id || null,
+        client_id: data.client_id === 'none' ? null : data.client_id,
       };
 
       if (editingTransaction) {
