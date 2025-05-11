@@ -60,4 +60,6 @@ export interface SupabaseProfile {
   address: string | null;
   planexpirydate: string | null;
   theme: string | null;
+  securityquestion: string | null;
+  securityanswer: string | null;
 }

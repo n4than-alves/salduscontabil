@@ -73,6 +73,8 @@ export type Database = {
           planexpirydate: string | null
           planstartdate: string | null
           plantype: string | null
+          securityanswer: string | null
+          securityquestion: string | null
           theme: string | null
         }
         Insert: {
@@ -87,6 +89,8 @@ export type Database = {
           planexpirydate?: string | null
           planstartdate?: string | null
           plantype?: string | null
+          securityanswer?: string | null
+          securityquestion?: string | null
           theme?: string | null
         }
         Update: {
@@ -101,6 +105,8 @@ export type Database = {
           planexpirydate?: string | null
           planstartdate?: string | null
           plantype?: string | null
+          securityanswer?: string | null
+          securityquestion?: string | null
           theme?: string | null
         }
         Relationships: []

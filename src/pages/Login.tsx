@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -111,7 +110,7 @@ const Login = () => {
       // Primeiro, buscar o perfil do usuário pelo e-mail
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('id, email, securityQuestion, securityAnswer')
+        .select('id, email, securityquestion, securityanswer')
         .eq('email', data.email)
         .single();
       
@@ -126,13 +125,13 @@ const Login = () => {
       }
 
       // Verificar se o usuário já tem uma pergunta de segurança
-      if (!profiles.securityQuestion) {
+      if (!profiles.securityquestion) {
         // Se não tiver, salvar a pergunta e resposta fornecidas
         const { error: updateError } = await supabase
           .from('profiles')
           .update({
-            securityQuestion: data.securityQuestion,
-            securityAnswer: data.securityAnswer.toLowerCase().trim()
+            securityquestion: data.securityQuestion,
+            securityanswer: data.securityAnswer.toLowerCase().trim()
           })
           .eq('id', profiles.id);
         
@@ -155,8 +154,8 @@ const Login = () => {
         setShowResetForm(true);
       } else {
         // Se já tiver uma pergunta, verificar se a resposta está correta
-        if (profiles.securityQuestion !== data.securityQuestion || 
-            profiles.securityAnswer !== data.securityAnswer.toLowerCase().trim()) {
+        if (profiles.securityquestion !== data.securityQuestion || 
+            profiles.securityanswer !== data.securityAnswer.toLowerCase().trim()) {
           toast({
             title: 'Verificação falhou',
             description: 'Pergunta de segurança ou resposta incorreta.',

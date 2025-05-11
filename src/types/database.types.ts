@@ -24,6 +24,8 @@ export interface Database {
           address: string | null
           planexpirydate: string | null
           theme: string | null
+          securityquestion: string | null
+          securityanswer: string | null
         }
         Insert: {
           id: string
@@ -38,6 +40,8 @@ export interface Database {
           address?: string | null
           planexpirydate?: string | null
           theme?: string | null
+          securityquestion?: string | null
+          securityanswer?: string | null
         }
         Update: {
           id?: string
@@ -52,6 +56,8 @@ export interface Database {
           address?: string | null
           planexpirydate?: string | null
           theme?: string | null
+          securityquestion?: string | null
+          securityanswer?: string | null
         }
         Relationships: [
           {
