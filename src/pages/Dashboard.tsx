@@ -92,7 +92,7 @@ const Dashboard = () => {
 
         if (countError) throw countError;
 
-        const weeklyLimit = user.planType === 'free' ? 5 : Infinity;
+        const weeklyLimit = user.planType === 'pro' ? Infinity : 5;
         const canCreate = user.planType === 'pro' || (count as number) < weeklyLimit;
 
         setData({
@@ -265,7 +265,7 @@ const Dashboard = () => {
                         </span>
                       )}
                     </div>
-                    {user?.planType === 'free' ? (
+                    {user?.planType !== 'pro' && (
                       <div>
                         <div className="mb-1 flex justify-between text-sm">
                           <span>Transações usadas esta semana</span>
@@ -298,15 +298,6 @@ const Dashboard = () => {
                         </p>
                         <p className="mt-2 text-sm font-medium text-saldus-700">
                           Atualize para o Plano Pro por R$40/mês e tenha transações ilimitadas!
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-sm text-gray-600">
-                          Você tem acesso a transações ilimitadas e todos os recursos da plataforma.
-                        </p>
-                        <p className="mt-2 text-sm font-medium text-saldus-700">
-                          Assinatura: R$40/mês
                         </p>
                       </div>
                     )}

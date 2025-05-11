@@ -28,7 +28,7 @@ serve(async (req) => {
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY não está configurada");
     logStep("Chave Stripe verificada");
 
-    // Inicializar cliente Supabase
+    // Inicializar cliente Supabase com a ANON key
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? ""
@@ -62,7 +62,7 @@ serve(async (req) => {
     const origin = req.headers.get("origin") || "https://app.saldus.com.br";
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${origin}/dashboard`,
+      return_url: `${origin}/settings`,
     });
     
     logStep("Sessão do portal de cliente criada", { 
