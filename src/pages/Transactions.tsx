@@ -524,32 +524,6 @@ const Transactions = () => {
         </div>
       </div>
 
-      {user?.planType === 'free' && (
-        <div className="mb-6 rounded-md border bg-blue-50 p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="font-medium text-saldus-800">
-                Plano Gratuito: {weeklyLimit.count} / {weeklyLimit.limit} movimentações esta semana
-              </h3>
-              <p className="text-sm text-gray-600">
-                {weeklyLimit.canCreate
-                  ? `Você ainda pode adicionar ${weeklyLimit.limit - weeklyLimit.count} movimentações esta semana.`
-                  : 'Você atingiu o limite de movimentações desta semana.'}
-              </p>
-            </div>
-            <Button
-              className="mt-2 bg-saldus-600 hover:bg-saldus-700 sm:mt-0"
-              onClick={() => toast({
-                title: 'Upgrade do plano',
-                description: 'Em breve você poderá fazer o upgrade para o Plano Pro!',
-              })}
-            >
-              Atualizar para Plano Pro
-            </Button>
-          </div>
-        </div>
-      )}
-
       {isLoading ? (
         <div className="flex justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-saldus-600" />

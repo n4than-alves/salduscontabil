@@ -7,7 +7,9 @@ CREATE TABLE public.profiles (
   fullName TEXT,
   phone TEXT,
   planType TEXT DEFAULT 'free',
-  planStartDate TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  planStartDate TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  securityQuestion TEXT,
+  securityAnswer TEXT
 );
 
 -- Set up RLS policies for profiles
