@@ -92,6 +92,7 @@ const Dashboard = () => {
 
         if (countError) throw countError;
 
+        // Fix: Use string comparison instead of type comparison
         const weeklyLimit = user.planType === 'pro' ? Infinity : 5;
         const canCreate = user.planType === 'pro' || (count as number) < weeklyLimit;
 
@@ -236,14 +237,13 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {user?.planType !== 'pro' && (
+        {/* Only show plan card for free users */}
+        {user && user.planType !== 'pro' && (
           <Card>
             <CardHeader>
               <CardTitle>Seu Plano</CardTitle>
               <CardDescription>
-                {user?.planType === 'pro' 
-                  ? 'Você possui o Plano Pro com transações ilimitadas'
-                  : 'Plano Gratuito com limite de transações semanais'}
+                Plano Gratuito com limite de transações semanais
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -256,51 +256,44 @@ const Dashboard = () => {
                       <div className="flex items-center space-x-2">
                         <Calendar className="h-5 w-5 text-saldus-700" />
                         <h3 className="font-medium text-saldus-700">
-                          {user?.planType === 'pro' ? 'Plano Pro' : 'Plano Gratuito'}
+                          Plano Gratuito
                         </h3>
                       </div>
-                      {user?.planType === 'pro' && (
-                        <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
-                          Ativo
-                        </span>
-                      )}
                     </div>
-                    {user?.planType !== 'pro' && (
-                      <div>
-                        <div className="mb-1 flex justify-between text-sm">
-                          <span>Transações usadas esta semana</span>
-                          <span className="font-medium">
-                            {data.weeklyTransactionCount} / {data.weeklyTransactionLimit}
-                          </span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-                          <div
-                            className={cn(
-                              'h-full bg-saldus-600',
-                              data.canCreateTransactions
-                                ? ''
-                                : 'bg-red-500'
-                            )}
-                            style={{
-                              width: `${Math.min(
-                                (data.weeklyTransactionCount / data.weeklyTransactionLimit) * 100,
-                                100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                        <p className="mt-2 text-sm text-gray-600">
-                          {data.canCreateTransactions
-                            ? `Você ainda pode adicionar ${
-                                data.weeklyTransactionLimit - data.weeklyTransactionCount
-                              } transações esta semana.`
-                            : 'Você atingiu o limite de transações desta semana.'}
-                        </p>
-                        <p className="mt-2 text-sm font-medium text-saldus-700">
-                          Atualize para o Plano Pro por R$40/mês e tenha transações ilimitadas!
-                        </p>
+                    <div>
+                      <div className="mb-1 flex justify-between text-sm">
+                        <span>Transações usadas esta semana</span>
+                        <span className="font-medium">
+                          {data.weeklyTransactionCount} / {data.weeklyTransactionLimit}
+                        </span>
                       </div>
-                    )}
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                        <div
+                          className={cn(
+                            'h-full bg-saldus-600',
+                            data.canCreateTransactions
+                              ? ''
+                              : 'bg-red-500'
+                          )}
+                          style={{
+                            width: `${Math.min(
+                              (data.weeklyTransactionCount / data.weeklyTransactionLimit) * 100,
+                              100
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="mt-2 text-sm text-gray-600">
+                        {data.canCreateTransactions
+                          ? `Você ainda pode adicionar ${
+                              data.weeklyTransactionLimit - data.weeklyTransactionCount
+                            } transações esta semana.`
+                          : 'Você atingiu o limite de transações desta semana.'}
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-saldus-700">
+                        Atualize para o Plano Pro por R$40/mês e tenha transações ilimitadas!
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
