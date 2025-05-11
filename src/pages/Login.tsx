@@ -1,4 +1,5 @@
-import { useState } from 'react';
+
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -28,6 +29,8 @@ import {
   DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'E-mail inválido' }),
@@ -36,8 +39,7 @@ const loginSchema = z.object({
 
 const recoverySchema = z.object({
   email: z.string().email({ message: 'E-mail inválido' }),
-  securityQuestion: z.string().min(3, { message: 'Pergunta de segurança é obrigatória' }),
-  securityAnswer: z.string().min(1, { message: 'Resposta é obrigatória' }),
+  securityAnswer: z.string().min(1, { message: 'Selecione uma resposta' }),
 });
 
 const resetPasswordSchema = z.object({
@@ -52,6 +54,34 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 type RecoveryFormValues = z.infer<typeof recoverySchema>;
 type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
 
+function generateMultipleChoices(correctAnswer: string): string[] {
+  const answers = [correctAnswer.toLowerCase()];
+  
+  // Lista de possíveis respostas para distrair
+  const distractors = [
+    'Resposta incorreta 1',
+    'Opção errada',
+    'Alternativa falsa',
+    'Não é esta resposta',
+    'Tente novamente',
+    'Outra opção',
+    'Alternativa diferente',
+    'Resposta alternativa',
+    'Outra possibilidade'
+  ];
+  
+  // Adicionar 3 respostas erradas para ter 4 opções no total
+  while (answers.length < 4) {
+    const distractor = distractors[Math.floor(Math.random() * distractors.length)];
+    if (!answers.includes(distractor)) {
+      answers.push(distractor);
+    }
+  }
+  
+  // Embaralhar as respostas
+  return answers.sort(() => Math.random() - 0.5);
+}
+
 const Login = () => {
   const { signIn, user } = useAuth();
   const navigate = useNavigate();
@@ -60,6 +90,9 @@ const Login = () => {
   const [openResetDialog, setOpenResetDialog] = useState(false);
   const [showResetForm, setShowResetForm] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [securityQuestion, setSecurityQuestion] = useState<string>('');
+  const [answerOptions, setAnswerOptions] = useState<string[]>([]);
+  const [correctAnswer, setCorrectAnswer] = useState<string>('');
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -73,7 +106,6 @@ const Login = () => {
     resolver: zodResolver(recoverySchema),
     defaultValues: {
       email: '',
-      securityQuestion: '',
       securityAnswer: '',
     },
   });
@@ -124,51 +156,31 @@ const Login = () => {
         return;
       }
 
-      // Verificar se o usuário já tem uma pergunta de segurança
-      if (!profiles.securityquestion) {
-        // Se não tiver, salvar a pergunta e resposta fornecidas
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({
-            securityquestion: data.securityQuestion,
-            securityanswer: data.securityAnswer.toLowerCase().trim()
-          })
-          .eq('id', profiles.id);
-        
-        if (updateError) {
-          toast({
-            title: 'Erro ao salvar',
-            description: 'Não foi possível salvar sua pergunta de segurança.',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
-        
+      // Verificar se o usuário tem uma pergunta de segurança configurada
+      if (!profiles.securityquestion || !profiles.securityanswer) {
         toast({
-          title: 'Pergunta de segurança salva',
-          description: 'Agora você pode usar esta pergunta para recuperar sua senha no futuro.',
+          title: 'Recuperação não disponível',
+          description: 'Este usuário não configurou uma pergunta de segurança.',
+          variant: 'destructive',
         });
-        
-        setUserId(profiles.id);
-        setShowResetForm(true);
-      } else {
-        // Se já tiver uma pergunta, verificar se a resposta está correta
-        if (profiles.securityquestion !== data.securityQuestion || 
-            profiles.securityanswer !== data.securityAnswer.toLowerCase().trim()) {
-          toast({
-            title: 'Verificação falhou',
-            description: 'Pergunta de segurança ou resposta incorreta.',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        setUserId(profiles.id);
-        setShowResetForm(true);
+        setIsLoading(false);
+        return;
       }
       
+      // Verificar se a resposta selecionada está correta
+      if (data.securityAnswer !== profiles.securityanswer.toLowerCase().trim()) {
+        toast({
+          title: 'Verificação falhou',
+          description: 'Resposta de segurança incorreta.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Se a resposta estiver correta, mostrar o formulário de redefinição
+      setUserId(profiles.id);
+      setShowResetForm(true);
       setIsLoading(false);
     } catch (error: any) {
       console.error('Erro na recuperação de senha:', error);
@@ -263,6 +275,67 @@ const Login = () => {
     resetPasswordForm.reset();
   };
 
+  const fetchSecurityQuestion = async (email: string) => {
+    try {
+      setIsLoading(true);
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, email, securityquestion, securityanswer')
+        .eq('email', email)
+        .single();
+      
+      if (error || !profile) {
+        toast({
+          title: 'Usuário não encontrado',
+          description: 'E-mail não encontrado no sistema.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!profile.securityquestion || !profile.securityanswer) {
+        toast({
+          title: 'Recuperação não disponível',
+          description: 'Este usuário não configurou uma pergunta de segurança.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      setSecurityQuestion(profile.securityquestion);
+      setCorrectAnswer(profile.securityanswer.toLowerCase().trim());
+      
+      // Gerar opções de resposta aleatórias incluindo a correta
+      const options = generateMultipleChoices(profile.securityanswer);
+      setAnswerOptions(options);
+      setUserId(profile.id);
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Erro ao buscar pergunta de segurança:', error);
+      setIsLoading(false);
+      toast({
+        title: 'Erro',
+        description: 'Ocorreu um erro ao buscar seus dados. Tente novamente.',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  const handleRecoveryStart = () => {
+    const email = recoveryForm.getValues('email');
+    if (!email) {
+      recoveryForm.setError('email', { 
+        message: 'Informe seu e-mail para continuar' 
+      });
+      return;
+    }
+    
+    fetchSecurityQuestion(email);
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
@@ -340,44 +413,59 @@ const Login = () => {
                                   </div>
                                 </FormControl>
                                 <FormMessage />
+                                {!securityQuestion && (
+                                  <Button 
+                                    type="button" 
+                                    variant="outline"
+                                    className="mt-2 w-full text-sm"
+                                    onClick={handleRecoveryStart}
+                                  >
+                                    Buscar minha pergunta de segurança
+                                  </Button>
+                                )}
                               </FormItem>
                             )}
                           />
-                          <FormField
-                            control={recoveryForm.control}
-                            name="securityQuestion"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Pergunta de Segurança</FormLabel>
-                                <FormControl>
-                                  <div className="flex items-center space-x-2">
-                                    <HelpCircle className="h-4 w-4 text-gray-500" />
-                                    <Input 
-                                      placeholder="Ex: Nome do seu primeiro animal de estimação" 
-                                      {...field} 
-                                    />
-                                  </div>
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={recoveryForm.control}
-                            name="securityAnswer"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Resposta</FormLabel>
-                                <FormControl>
-                                  <div className="flex items-center space-x-2">
-                                    <KeyRound className="h-4 w-4 text-gray-500" />
-                                    <Input placeholder="Sua resposta" {...field} />
-                                  </div>
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                          
+                          {securityQuestion && (
+                            <div className="space-y-4">
+                              <div className="rounded-md border border-gray-200 p-4">
+                                <h4 className="mb-2 font-medium">Pergunta de Segurança:</h4>
+                                <p className="text-gray-700">{securityQuestion}</p>
+                              </div>
+                              
+                              <FormField
+                                control={recoveryForm.control}
+                                name="securityAnswer"
+                                render={({ field }) => (
+                                  <FormItem className="space-y-3">
+                                    <FormLabel>Selecione a resposta correta:</FormLabel>
+                                    <FormControl>
+                                      <RadioGroup 
+                                        onValueChange={field.onChange} 
+                                        value={field.value}
+                                        className="space-y-2"
+                                      >
+                                        {answerOptions.map((option) => (
+                                          <div key={option} className="flex items-center space-x-2">
+                                            <RadioGroupItem value={option} id={option} />
+                                            <label 
+                                              htmlFor={option} 
+                                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                            >
+                                              {option}
+                                            </label>
+                                          </div>
+                                        ))}
+                                      </RadioGroup>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          )}
+                          
                           <DialogFooter className="sm:justify-between">
                             <DialogClose asChild>
                               <Button 
@@ -388,20 +476,22 @@ const Login = () => {
                                 Cancelar
                               </Button>
                             </DialogClose>
-                            <Button 
-                              type="submit" 
-                              className="bg-saldus-600 hover:bg-saldus-700"
-                              disabled={isLoading}
-                            >
-                              {isLoading ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Verificando...
-                                </>
-                              ) : (
-                                'Verificar'
-                              )}
-                            </Button>
+                            {securityQuestion && (
+                              <Button 
+                                type="submit" 
+                                className="bg-saldus-600 hover:bg-saldus-700"
+                                disabled={isLoading}
+                              >
+                                {isLoading ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Verificando...
+                                  </>
+                                ) : (
+                                  'Verificar'
+                                )}
+                              </Button>
+                            )}
                           </DialogFooter>
                         </form>
                       </Form>
