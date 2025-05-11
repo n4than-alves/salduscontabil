@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSubscription } from '@/hooks/use-subscription';
 
 const NavItem = ({
   to,
@@ -45,6 +46,7 @@ const NavItem = ({
 const Sidebar = () => {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { planType } = useSubscription();
   const isMobile = useIsMobile();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -141,7 +143,7 @@ const Sidebar = () => {
               {user.fullName || user.email}
             </span>
             <span className="text-xs text-gray-500">
-              Plano {user.planType === 'pro' ? 'Pro' : 'Gratuito'}
+              Plano {planType === 'pro' ? 'Pro' : 'Gratuito'}
             </span>
           </div>
           <Button

@@ -38,6 +38,8 @@ export const useSubscription = () => {
         throw new Error(error.message);
       }
       
+      console.log('Subscription data received:', data);
+      
       setStatus({
         subscribed: data.subscribed,
         planType: data.planType,
@@ -101,9 +103,15 @@ export const useSubscription = () => {
     }
   };
 
+  // Add polling to regularly check subscription status
   useEffect(() => {
+    const checkAndUpdateStatus = async () => {
+      await checkSubscription();
+    };
+    
+    // Check immediately on mount
     if (user) {
-      checkSubscription();
+      checkAndUpdateStatus();
     } else {
       setStatus({
         subscribed: false,
@@ -113,6 +121,15 @@ export const useSubscription = () => {
         error: null
       });
     }
+    
+    // Set up polling every 30 seconds
+    const intervalId = setInterval(() => {
+      if (user) {
+        checkAndUpdateStatus();
+      }
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(intervalId);
   }, [user]);
 
   // Verificar parâmetros na URL após retorno do checkout

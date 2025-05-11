@@ -12,6 +12,7 @@ import { formatCurrency } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useSubscription } from '@/hooks/use-subscription';
 
 interface DashboardData {
   totalIncome: number;
@@ -25,6 +26,7 @@ interface DashboardData {
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { planType } = useSubscription();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData>({
     totalIncome: 0,
@@ -92,9 +94,9 @@ const Dashboard = () => {
 
         if (countError) throw countError;
 
-        // Fix: Use string comparison instead of type comparison
-        const weeklyLimit = user.planType === 'pro' ? Infinity : 5;
-        const canCreate = user.planType === 'pro' || (count as number) < weeklyLimit;
+        // Use the planType from useSubscription
+        const weeklyLimit = planType === 'pro' ? Infinity : 5;
+        const canCreate = planType === 'pro' || (count as number) < weeklyLimit;
 
         setData({
           totalIncome,
@@ -118,7 +120,7 @@ const Dashboard = () => {
     };
 
     fetchDashboardData();
-  }, [user]);
+  }, [user, planType]);
 
   return (
     <AppLayout>
@@ -238,7 +240,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Only show plan card for free users */}
-        {user && user.planType !== 'pro' && (
+        {planType === 'free' && (
           <Card>
             <CardHeader>
               <CardTitle>Seu Plano</CardTitle>

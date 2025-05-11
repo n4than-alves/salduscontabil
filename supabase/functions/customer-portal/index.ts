@@ -20,6 +20,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Usar a service_role key para realizar escritas no banco de dados
+  const supabaseClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
+
   try {
     logStep("Função iniciada");
 
@@ -27,12 +34,6 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY não está configurada");
     logStep("Chave Stripe verificada");
-
-    // Inicializar cliente Supabase com a ANON key
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-    );
 
     // Autenticar usuário
     const authHeader = req.headers.get("Authorization");
@@ -52,25 +53,21 @@ serve(async (req) => {
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     
     if (customers.data.length === 0) {
-      throw new Error("Nenhuma conta Stripe encontrada para este usuário");
+      throw new Error("Nenhum cliente Stripe encontrado para este usuário");
     }
-    
+
     const customerId = customers.data[0].id;
     logStep("Cliente Stripe encontrado", { customerId });
 
-    // Criar sessão do portal de cliente para gerenciar assinatura
-    const origin = req.headers.get("origin") || "https://app.saldus.com.br";
-    const portalSession = await stripe.billingPortal.sessions.create({
+    const origin = req.headers.get("origin") || "http://localhost:5173";
+    const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}/settings`,
     });
-    
-    logStep("Sessão do portal de cliente criada", { 
-      sessionId: portalSession.id, 
-      url: portalSession.url 
-    });
 
-    return new Response(JSON.stringify({ url: portalSession.url }), {
+    logStep("Portal criado com sucesso", { url: session.url });
+    
+    return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
