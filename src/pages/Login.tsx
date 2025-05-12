@@ -119,10 +119,11 @@ const Login = () => {
   });
 
   // Redirecionar para o dashboard se já estiver logado
-  if (user) {
-    navigate('/dashboard');
-    return null;
-  }
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   const onSubmit = async (data: LoginFormValues) => {
     try {
@@ -139,36 +140,8 @@ const Login = () => {
     try {
       setIsLoading(true);
       
-      // Primeiro, buscar o perfil do usuário pelo e-mail
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, email, securityquestion, securityanswer')
-        .eq('email', data.email)
-        .single();
-      
-      if (profileError) {
-        toast({
-          title: 'Erro na recuperação',
-          description: 'E-mail não encontrado no sistema.',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Verificar se o usuário tem uma pergunta de segurança configurada
-      if (!profiles.securityquestion || !profiles.securityanswer) {
-        toast({
-          title: 'Recuperação não disponível',
-          description: 'Este usuário não configurou uma pergunta de segurança.',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
-      }
-      
       // Verificar se a resposta selecionada está correta
-      if (data.securityAnswer !== profiles.securityanswer.toLowerCase().trim()) {
+      if (data.securityAnswer !== correctAnswer) {
         toast({
           title: 'Verificação falhou',
           description: 'Resposta de segurança incorreta.',
@@ -179,7 +152,6 @@ const Login = () => {
       }
       
       // Se a resposta estiver correta, mostrar o formulário de redefinição
-      setUserId(profiles.id);
       setShowResetForm(true);
       setIsLoading(false);
     } catch (error: any) {
@@ -223,14 +195,13 @@ const Login = () => {
         return;
       }
       
-      // Atualizar a senha do usuário
-      const { error } = await supabase.auth.admin.updateUserById(
-        userId,
-        { password: data.newPassword }
-      );
+      // Atualizar a senha do usuário usando updateUser da API Auth
+      const { error } = await supabase.auth.updateUser({
+        password: data.newPassword
+      });
       
       if (error) {
-        // Se não funcionar com admin, tentar com resetPasswordForEmail
+        // Se não funcionar com updateUser, tentar com resetPasswordForEmail
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(
           profile.email,
           { redirectTo: window.location.origin + '/login' }
@@ -278,39 +249,85 @@ const Login = () => {
   const fetchSecurityQuestion = async (email: string) => {
     try {
       setIsLoading(true);
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('id, email, securityquestion, securityanswer')
-        .eq('email', email)
-        .single();
       
-      if (error || !profile) {
-        toast({
-          title: 'Usuário não encontrado',
-          description: 'E-mail não encontrado no sistema.',
-          variant: 'destructive',
+      // 1. Primeiro, buscar o usuário por e-mail na tabela de autenticação
+      const { data: authUsers, error: authError } = await supabase.auth
+        .admin.listUsers({
+          filters: {
+            email: email
+          }
         });
-        setIsLoading(false);
-        return;
-      }
       
-      if (!profile.securityquestion || !profile.securityanswer) {
-        toast({
-          title: 'Recuperação não disponível',
-          description: 'Este usuário não configurou uma pergunta de segurança.',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+      if (authError || !authUsers || authUsers.users.length === 0) {
+        // Se não encontrar pelo admin.listUsers, tentar buscar diretamente no perfil
+        const { data: profileByEmail, error: profileEmailError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', email)
+          .single();
+          
+        if (profileEmailError || !profileByEmail) {
+          toast({
+            title: 'Usuário não encontrado',
+            description: 'E-mail não encontrado no sistema.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        if (!profileByEmail.securityquestion || !profileByEmail.securityanswer) {
+          toast({
+            title: 'Recuperação não disponível',
+            description: 'Este usuário não configurou uma pergunta de segurança.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        setSecurityQuestion(profileByEmail.securityquestion);
+        setCorrectAnswer(profileByEmail.securityanswer.toLowerCase().trim());
+        setUserId(profileByEmail.id);
+      } else {
+        // Usuário encontrado via auth.admin.listUsers
+        const userId = authUsers.users[0].id;
+        
+        // Buscar o perfil do usuário pelo ID
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        
+        if (profileError || !profile) {
+          toast({
+            title: 'Recuperação não disponível',
+            description: 'Não foi possível encontrar o perfil deste usuário.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        if (!profile.securityquestion || !profile.securityanswer) {
+          toast({
+            title: 'Recuperação não disponível',
+            description: 'Este usuário não configurou uma pergunta de segurança.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        setSecurityQuestion(profile.securityquestion);
+        setCorrectAnswer(profile.securityanswer.toLowerCase().trim());
+        setUserId(userId);
       }
-      
-      setSecurityQuestion(profile.securityquestion);
-      setCorrectAnswer(profile.securityanswer.toLowerCase().trim());
       
       // Gerar opções de resposta aleatórias incluindo a correta
-      const options = generateMultipleChoices(profile.securityanswer);
+      const options = generateMultipleChoices(correctAnswer);
       setAnswerOptions(options);
-      setUserId(profile.id);
       
       setIsLoading(false);
     } catch (error) {
@@ -335,6 +352,10 @@ const Login = () => {
     
     fetchSecurityQuestion(email);
   };
+
+  if (user) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
