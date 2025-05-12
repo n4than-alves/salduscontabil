@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -250,83 +249,40 @@ const Login = () => {
     try {
       setIsLoading(true);
       
-      // 1. Primeiro, buscar o usuário por e-mail na tabela de autenticação
-      const { data: authUsers, error: authError } = await supabase.auth
-        .admin.listUsers({
-          filters: {
-            email: email
-          }
+      // Modified approach: Instead of using admin.listUsers, we'll directly query the profiles table
+      // since we're storing user emails there as well
+      const { data: profileByEmail, error: profileEmailError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .single();
+        
+      if (profileEmailError || !profileByEmail) {
+        toast({
+          title: 'Usuário não encontrado',
+          description: 'E-mail não encontrado no sistema.',
+          variant: 'destructive',
         });
-      
-      if (authError || !authUsers || authUsers.users.length === 0) {
-        // Se não encontrar pelo admin.listUsers, tentar buscar diretamente no perfil
-        const { data: profileByEmail, error: profileEmailError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', email)
-          .single();
-          
-        if (profileEmailError || !profileByEmail) {
-          toast({
-            title: 'Usuário não encontrado',
-            description: 'E-mail não encontrado no sistema.',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        if (!profileByEmail.securityquestion || !profileByEmail.securityanswer) {
-          toast({
-            title: 'Recuperação não disponível',
-            description: 'Este usuário não configurou uma pergunta de segurança.',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        setSecurityQuestion(profileByEmail.securityquestion);
-        setCorrectAnswer(profileByEmail.securityanswer.toLowerCase().trim());
-        setUserId(profileByEmail.id);
-      } else {
-        // Usuário encontrado via auth.admin.listUsers
-        const userId = authUsers.users[0].id;
-        
-        // Buscar o perfil do usuário pelo ID
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-        
-        if (profileError || !profile) {
-          toast({
-            title: 'Recuperação não disponível',
-            description: 'Não foi possível encontrar o perfil deste usuário.',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        if (!profile.securityquestion || !profile.securityanswer) {
-          toast({
-            title: 'Recuperação não disponível',
-            description: 'Este usuário não configurou uma pergunta de segurança.',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        setSecurityQuestion(profile.securityquestion);
-        setCorrectAnswer(profile.securityanswer.toLowerCase().trim());
-        setUserId(userId);
+        setIsLoading(false);
+        return;
       }
       
+      if (!profileByEmail.securityquestion || !profileByEmail.securityanswer) {
+        toast({
+          title: 'Recuperação não disponível',
+          description: 'Este usuário não configurou uma pergunta de segurança.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      setSecurityQuestion(profileByEmail.securityquestion);
+      setCorrectAnswer(profileByEmail.securityanswer.toLowerCase().trim());
+      setUserId(profileByEmail.id);
+      
       // Gerar opções de resposta aleatórias incluindo a correta
-      const options = generateMultipleChoices(correctAnswer);
+      const options = generateMultipleChoices(profileByEmail.securityanswer);
       setAnswerOptions(options);
       
       setIsLoading(false);
