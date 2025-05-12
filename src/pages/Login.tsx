@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -249,22 +250,37 @@ const Login = () => {
     try {
       setIsLoading(true);
       
-      // Modified approach: Instead of using admin.listUsers, we'll directly query the profiles table
-      // since we're storing user emails there as well
+      // Improved approach: Query the profiles table with a case-insensitive email match
       const { data: profileByEmail, error: profileEmailError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('email', email)
-        .single();
+        .ilike('email', email) // Using ilike for case-insensitive matching
+        .maybeSingle(); // Using maybeSingle instead of single to handle no results gracefully
+        
+      console.log('Profile query result:', { profileByEmail, profileEmailError });
         
       if (profileEmailError || !profileByEmail) {
-        toast({
-          title: 'Usuário não encontrado',
-          description: 'E-mail não encontrado no sistema.',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+        // Fallback: Try with direct email match
+        const { data: exactProfileMatch, error: exactMatchError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', email)
+          .single();
+          
+        console.log('Exact match query result:', { exactProfileMatch, exactMatchError });
+          
+        if (exactMatchError || !exactProfileMatch) {
+          toast({
+            title: 'Usuário não encontrado',
+            description: 'E-mail não encontrado no sistema.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        // Use the exact match result if found
+        profileByEmail = exactProfileMatch;
       }
       
       if (!profileByEmail.securityquestion || !profileByEmail.securityanswer) {
