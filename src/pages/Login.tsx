@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -28,6 +28,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'E-mail inválido' }),
@@ -44,18 +45,47 @@ const resetPasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
+const emailResetSchema = z.object({
+  email: z.string().email({ message: 'E-mail inválido' }),
+});
+
+const codeResetSchema = z.object({
+  email: z.string().email({ message: 'E-mail inválido' }),
+  resetCode: z.string().min(1, { message: 'Código de verificação é obrigatório' }),
+  newPassword: z.string().min(6, { message: 'Nova senha deve ter no mínimo 6 caracteres' }),
+  confirmPassword: z.string().min(6, { message: 'Confirme a nova senha' }),
+}).refine(data => data.newPassword === data.confirmPassword, {
+  message: "Senhas não conferem",
+  path: ["confirmPassword"],
+});
+
 type LoginFormValues = z.infer<typeof loginSchema>;
 type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
+type EmailResetFormValues = z.infer<typeof emailResetSchema>;
+type CodeResetFormValues = z.infer<typeof codeResetSchema>;
 
 const Login = () => {
-  const { signIn, user, checkEmail, resetPassword } = useAuth();
+  const { signIn, user, checkEmail, resetPassword, requestPasswordReset, verifyResetCode } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [openResetDialog, setOpenResetDialog] = useState(false);
   const [resetStep, setResetStep] = useState<'email' | 'security' | 'password'>('email');
   const [securityQuestion, setSecurityQuestion] = useState<string>('');
   const [emailNotFound, setEmailNotFound] = useState<boolean>(false);
+  const [resetMethod, setResetMethod] = useState<'security' | 'email'>('email');
+  const [emailResetSent, setEmailResetSent] = useState(false);
+  
+  // Check for reset parameter in URL
+  useEffect(() => {
+    const reset = searchParams.get('reset');
+    if (reset === 'true') {
+      setOpenResetDialog(true);
+      setResetMethod('email');
+      setEmailResetSent(true);
+    }
+  }, [searchParams]);
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -70,6 +100,23 @@ const Login = () => {
     defaultValues: {
       email: '',
       securityAnswer: '',
+      newPassword: '',
+      confirmPassword: '',
+    },
+  });
+
+  const emailResetForm = useForm<EmailResetFormValues>({
+    resolver: zodResolver(emailResetSchema),
+    defaultValues: {
+      email: '',
+    },
+  });
+
+  const codeResetForm = useForm<CodeResetFormValues>({
+    resolver: zodResolver(codeResetSchema),
+    defaultValues: {
+      email: '',
+      resetCode: '',
       newPassword: '',
       confirmPassword: '',
     },
@@ -194,10 +241,100 @@ const Login = () => {
     }
   };
 
+  // New function to handle email reset request
+  const handleRequestEmailReset = async () => {
+    const { email } = emailResetForm.getValues();
+    
+    if (!email) {
+      emailResetForm.setError('email', { 
+        message: 'Informe seu e-mail para continuar' 
+      });
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      const result = await requestPasswordReset(email);
+      
+      if (result.success) {
+        setEmailResetSent(true);
+        codeResetForm.setValue('email', email);
+        toast({
+          title: 'Código enviado',
+          description: 'Verifique seu e-mail para obter o código de redefinição.',
+        });
+      } else {
+        toast({
+          title: 'Erro ao enviar código',
+          description: result.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
+      console.error('Erro ao solicitar código:', error);
+      toast({
+        title: 'Erro',
+        description: 'Ocorreu um erro ao enviar o código. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // New function to handle email code verification and password reset
+  const handleVerifyResetCode = async () => {
+    const { email, resetCode, newPassword, confirmPassword } = codeResetForm.getValues();
+    
+    if (!email || !resetCode) {
+      if (!email) codeResetForm.setError('email', { message: 'E-mail é obrigatório' });
+      if (!resetCode) codeResetForm.setError('resetCode', { message: 'Código de verificação é obrigatório' });
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      codeResetForm.setError('confirmPassword', { message: 'As senhas não conferem' });
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      const result = await verifyResetCode(email, resetCode, newPassword);
+      
+      if (result.success) {
+        toast({
+          title: 'Senha atualizada',
+          description: 'Sua senha foi atualizada com sucesso. Você pode fazer login agora.',
+        });
+        codeResetForm.reset();
+        setOpenResetDialog(false);
+        setEmailResetSent(false);
+      } else {
+        toast({
+          title: 'Erro na verificação',
+          description: result.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
+      console.error('Erro na verificação do código:', error);
+      toast({
+        title: 'Erro',
+        description: 'Ocorreu um erro ao verificar o código. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleCloseDialog = () => {
     setOpenResetDialog(false);
     setResetStep('email');
+    setEmailResetSent(false);
     resetForm.reset();
+    emailResetForm.reset();
+    codeResetForm.reset();
     setEmailNotFound(false);
   };
 
@@ -260,175 +397,336 @@ const Login = () => {
                         Recuperação de Senha
                       </DialogTitle>
                       <DialogDescription>
-                        {resetStep === 'email' && 'Informe seu e-mail para recuperar sua senha.'}
-                        {resetStep === 'security' && 'Responda à pergunta de segurança.'}
-                        {resetStep === 'password' && 'Defina uma nova senha para sua conta.'}
+                        Escolha um método para redefinir sua senha
                       </DialogDescription>
                     </DialogHeader>
                     
-                    <div className="space-y-4">
-                      {resetStep === 'email' && (
-                        <>
-                          <FormField
-                            control={resetForm.control}
-                            name="email"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>E-mail</FormLabel>
-                                <FormControl>
-                                  <div className="flex items-center space-x-2">
-                                    <Mail className="h-4 w-4 text-gray-500" />
-                                    <Input placeholder="seu@email.com" {...field} />
-                                  </div>
-                                </FormControl>
-                                <FormMessage />
-                                {emailNotFound && (
-                                  <p className="text-sm text-red-500 mt-1">
-                                    E-mail não encontrado. Verifique se digitou corretamente.
-                                  </p>
+                    <Tabs defaultValue="email" value={resetMethod} onValueChange={(value) => setResetMethod(value as 'security' | 'email')}>
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="email">Por E-mail</TabsTrigger>
+                        <TabsTrigger value="security">Pergunta de Segurança</TabsTrigger>
+                      </TabsList>
+                      
+                      {/* Redefinição por e-mail */}
+                      <TabsContent value="email" className="space-y-4 mt-4">
+                        {!emailResetSent ? (
+                          <Form {...emailResetForm}>
+                            <form className="space-y-4">
+                              <FormField
+                                control={emailResetForm.control}
+                                name="email"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>E-mail</FormLabel>
+                                    <FormControl>
+                                      <div className="flex items-center space-x-2">
+                                        <Mail className="h-4 w-4 text-gray-500" />
+                                        <Input placeholder="seu@email.com" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
                                 )}
-                              </FormItem>
-                            )}
-                          />
-                          
-                          <DialogFooter className="sm:justify-between">
-                            <DialogClose asChild>
+                              />
+                              
+                              <DialogFooter className="sm:justify-between">
+                                <DialogClose asChild>
+                                  <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    onClick={handleCloseDialog}
+                                  >
+                                    Cancelar
+                                  </Button>
+                                </DialogClose>
+                                <Button 
+                                  type="button" 
+                                  className="bg-saldus-600 hover:bg-saldus-700"
+                                  onClick={handleRequestEmailReset}
+                                  disabled={isLoading}
+                                >
+                                  {isLoading ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      Enviando...
+                                    </>
+                                  ) : (
+                                    'Enviar código'
+                                  )}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        ) : (
+                          <Form {...codeResetForm}>
+                            <form className="space-y-4">
+                              <FormField
+                                control={codeResetForm.control}
+                                name="email"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>E-mail</FormLabel>
+                                    <FormControl>
+                                      <div className="flex items-center space-x-2">
+                                        <Mail className="h-4 w-4 text-gray-500" />
+                                        <Input placeholder="seu@email.com" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              <FormField
+                                control={codeResetForm.control}
+                                name="resetCode"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Código de Verificação</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder="Digite o código recebido por e-mail" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              <FormField
+                                control={codeResetForm.control}
+                                name="newPassword"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Nova Senha</FormLabel>
+                                    <FormControl>
+                                      <div className="flex items-center space-x-2">
+                                        <KeyRound className="h-4 w-4 text-gray-500" />
+                                        <Input type="password" placeholder="••••••" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              <FormField
+                                control={codeResetForm.control}
+                                name="confirmPassword"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Confirmar Senha</FormLabel>
+                                    <FormControl>
+                                      <div className="flex items-center space-x-2">
+                                        <KeyRound className="h-4 w-4 text-gray-500" />
+                                        <Input type="password" placeholder="••••••" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              
+                              <div className="text-sm text-gray-500 flex items-center mt-2">
+                                <HelpCircle className="h-4 w-4 mr-2" />
+                                <span>Verifique seu e-mail e digite o código recebido para redefinir sua senha.</span>
+                              </div>
+                              
+                              <DialogFooter className="sm:justify-between">
+                                <Button 
+                                  type="button" 
+                                  variant="outline" 
+                                  onClick={() => {
+                                    setEmailResetSent(false);
+                                    codeResetForm.reset();
+                                  }}
+                                >
+                                  Voltar
+                                </Button>
+                                <Button 
+                                  type="button" 
+                                  className="bg-saldus-600 hover:bg-saldus-700"
+                                  onClick={handleVerifyResetCode}
+                                  disabled={isLoading}
+                                >
+                                  {isLoading ? (
+                                    <>
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      Verificando...
+                                    </>
+                                  ) : (
+                                    'Redefinir Senha'
+                                  )}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        )}
+                      </TabsContent>
+                      
+                      {/* Redefinição por pergunta de segurança */}
+                      <TabsContent value="security" className="space-y-4 mt-4">
+                        {resetStep === 'email' && (
+                          <>
+                            <FormField
+                              control={resetForm.control}
+                              name="email"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>E-mail</FormLabel>
+                                  <FormControl>
+                                    <div className="flex items-center space-x-2">
+                                      <Mail className="h-4 w-4 text-gray-500" />
+                                      <Input placeholder="seu@email.com" {...field} />
+                                    </div>
+                                  </FormControl>
+                                  <FormMessage />
+                                  {emailNotFound && (
+                                    <p className="text-sm text-red-500 mt-1">
+                                      E-mail não encontrado. Verifique se digitou corretamente.
+                                    </p>
+                                  )}
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <DialogFooter className="sm:justify-between">
+                              <DialogClose asChild>
+                                <Button 
+                                  type="button" 
+                                  variant="outline" 
+                                  onClick={handleCloseDialog}
+                                >
+                                  Cancelar
+                                </Button>
+                              </DialogClose>
+                              <Button 
+                                type="button" 
+                                className="bg-saldus-600 hover:bg-saldus-700"
+                                onClick={handleFindSecurityQuestion}
+                                disabled={isLoading}
+                              >
+                                {isLoading ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Buscando...
+                                  </>
+                                ) : (
+                                  'Continuar'
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </>
+                        )}
+                        
+                        {resetStep === 'security' && (
+                          <>
+                            <div className="rounded-md border border-gray-200 p-4">
+                              <h4 className="mb-2 font-medium">Pergunta de Segurança:</h4>
+                              <p className="text-gray-700">{securityQuestion}</p>
+                            </div>
+                            
+                            <FormField
+                              control={resetForm.control}
+                              name="securityAnswer"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Sua Resposta</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} placeholder="Digite sua resposta" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <DialogFooter className="sm:justify-between">
+                              <Button 
+                                type="button" 
+                                variant="outline"
+                                onClick={() => setResetStep('email')}
+                              >
+                                Voltar
+                              </Button>
+                              <Button 
+                                type="button" 
+                                className="bg-saldus-600 hover:bg-saldus-700"
+                                onClick={handleVerifySecurityAnswer}
+                                disabled={isLoading}
+                              >
+                                {isLoading ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Verificando...
+                                  </>
+                                ) : (
+                                  'Verificar'
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </>
+                        )}
+                        
+                        {resetStep === 'password' && (
+                          <>
+                            <FormField
+                              control={resetForm.control}
+                              name="newPassword"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Nova Senha</FormLabel>
+                                  <FormControl>
+                                    <div className="flex items-center space-x-2">
+                                      <KeyRound className="h-4 w-4 text-gray-500" />
+                                      <Input type="password" placeholder="••••••" {...field} />
+                                    </div>
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={resetForm.control}
+                              name="confirmPassword"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Confirmar Senha</FormLabel>
+                                  <FormControl>
+                                    <div className="flex items-center space-x-2">
+                                      <KeyRound className="h-4 w-4 text-gray-500" />
+                                      <Input type="password" placeholder="••••••" {...field} />
+                                    </div>
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <DialogFooter className="sm:justify-between">
                               <Button 
                                 type="button" 
                                 variant="outline" 
-                                onClick={handleCloseDialog}
+                                onClick={() => setResetStep('security')}
                               >
-                                Cancelar
+                                Voltar
                               </Button>
-                            </DialogClose>
-                            <Button 
-                              type="button" 
-                              className="bg-saldus-600 hover:bg-saldus-700"
-                              onClick={handleFindSecurityQuestion}
-                              disabled={isLoading}
-                            >
-                              {isLoading ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Buscando...
-                                </>
-                              ) : (
-                                'Continuar'
-                              )}
-                            </Button>
-                          </DialogFooter>
-                        </>
-                      )}
-                      
-                      {resetStep === 'security' && (
-                        <>
-                          <div className="rounded-md border border-gray-200 p-4">
-                            <h4 className="mb-2 font-medium">Pergunta de Segurança:</h4>
-                            <p className="text-gray-700">{securityQuestion}</p>
-                          </div>
-                          
-                          <FormField
-                            control={resetForm.control}
-                            name="securityAnswer"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Sua Resposta</FormLabel>
-                                <FormControl>
-                                  <Input {...field} placeholder="Digite sua resposta" />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          
-                          <DialogFooter className="sm:justify-between">
-                            <Button 
-                              type="button" 
-                              variant="outline"
-                              onClick={() => setResetStep('email')}
-                            >
-                              Voltar
-                            </Button>
-                            <Button 
-                              type="button" 
-                              className="bg-saldus-600 hover:bg-saldus-700"
-                              onClick={handleVerifySecurityAnswer}
-                              disabled={isLoading}
-                            >
-                              {isLoading ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Verificando...
-                                </>
-                              ) : (
-                                'Verificar'
-                              )}
-                            </Button>
-                          </DialogFooter>
-                        </>
-                      )}
-                      
-                      {resetStep === 'password' && (
-                        <>
-                          <FormField
-                            control={resetForm.control}
-                            name="newPassword"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Nova Senha</FormLabel>
-                                <FormControl>
-                                  <div className="flex items-center space-x-2">
-                                    <KeyRound className="h-4 w-4 text-gray-500" />
-                                    <Input type="password" placeholder="••••••" {...field} />
-                                  </div>
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={resetForm.control}
-                            name="confirmPassword"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Confirmar Senha</FormLabel>
-                                <FormControl>
-                                  <div className="flex items-center space-x-2">
-                                    <KeyRound className="h-4 w-4 text-gray-500" />
-                                    <Input type="password" placeholder="••••••" {...field} />
-                                  </div>
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <DialogFooter className="sm:justify-between">
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              onClick={() => setResetStep('security')}
-                            >
-                              Voltar
-                            </Button>
-                            <Button 
-                              type="button" 
-                              className="bg-saldus-600 hover:bg-saldus-700"
-                              onClick={handleResetPassword}
-                              disabled={isLoading}
-                            >
-                              {isLoading ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Redefinindo...
-                                </>
-                              ) : (
-                                'Redefinir Senha'
-                              )}
-                            </Button>
-                          </DialogFooter>
-                        </>
-                      )}
-                    </div>
+                              <Button 
+                                type="button" 
+                                className="bg-saldus-600 hover:bg-saldus-700"
+                                onClick={handleResetPassword}
+                                disabled={isLoading}
+                              >
+                                {isLoading ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Redefinindo...
+                                  </>
+                                ) : (
+                                  'Redefinir Senha'
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </>
+                        )}
+                      </TabsContent>
+                    </Tabs>
                   </DialogContent>
                 </Dialog>
               </div>

@@ -9,6 +9,21 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      api_keys: {
+        Row: {
+          key_name: string
+          key_value: string
+        }
+        Insert: {
+          key_name: string
+          key_value: string
+        }
+        Update: {
+          key_name?: string
+          key_value?: string
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           created_at: string | null
@@ -171,6 +186,10 @@ export type Database = {
           weekly_limit: number
           can_create: boolean
         }[]
+      }
+      send_email: {
+        Args: { recipient_email: string; subject: string; body: string }
+        Returns: undefined
       }
     }
     Enums: {

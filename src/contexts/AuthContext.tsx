@@ -12,6 +12,8 @@ interface AuthContextType {
   updateProfile: (data: Partial<User>) => Promise<void>;
   deleteAccount: () => Promise<void>;
   resetPassword: (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => Promise<boolean>;
+  requestPasswordReset: (email: string) => Promise<{ success: boolean; message: string }>;
+  verifyResetCode: (email: string, token: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
   checkEmail: (email: string) => Promise<{exists: boolean, securityQuestion: string | null}>;
   isProAccount: (email: string) => Promise<boolean>;
 }
@@ -448,7 +450,114 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
-  // Function to reset password
+  // New function to request a password reset via email
+  const requestPasswordReset = async (email: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      setLoading(true);
+      
+      // Check if email exists first
+      const emailCheck = await checkEmail(email);
+      if (!emailCheck.exists) {
+        return { 
+          success: false, 
+          message: 'Não foi encontrada uma conta com este e-mail.' 
+        };
+      }
+      
+      // Request password reset using Supabase's resetPasswordForEmail
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login?reset=true`,
+      });
+      
+      if (error) {
+        console.error('Error requesting password reset:', error);
+        return { 
+          success: false, 
+          message: `Erro ao enviar o código de redefinição: ${error.message}` 
+        };
+      }
+      
+      toast({
+        title: 'Código de redefinição enviado',
+        description: 'Verifique seu e-mail para obter o código de redefinição de senha.',
+      });
+      
+      return { 
+        success: true, 
+        message: 'Código de redefinição enviado com sucesso para o seu e-mail.' 
+      };
+    } catch (error: any) {
+      console.error('Error in requestPasswordReset:', error);
+      return { 
+        success: false, 
+        message: `Ocorreu um erro ao solicitar a redefinição de senha: ${error.message}` 
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // New function to verify OTP token and set new password
+  const verifyResetCode = async (email: string, token: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      setLoading(true);
+      
+      if (!email || !token || !newPassword) {
+        return {
+          success: false,
+          message: 'Email, código de verificação e nova senha são obrigatórios.'
+        };
+      }
+      
+      // First verify the OTP
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'recovery',
+      });
+      
+      if (verifyError) {
+        console.error('Error verifying reset code:', verifyError);
+        return {
+          success: false,
+          message: `Código de verificação inválido ou expirado: ${verifyError.message}`
+        };
+      }
+      
+      // Now update the password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+      
+      if (updateError) {
+        console.error('Error updating password:', updateError);
+        return {
+          success: false,
+          message: `Erro ao atualizar a senha: ${updateError.message}`
+        };
+      }
+      
+      toast({
+        title: 'Senha atualizada',
+        description: 'Sua senha foi alterada com sucesso. Você pode fazer login agora.',
+      });
+      
+      return {
+        success: true,
+        message: 'Senha atualizada com sucesso!'
+      };
+    } catch (error: any) {
+      console.error('Error in verifyResetCode:', error);
+      return {
+        success: false,
+        message: `Erro ao verificar o código e atualizar a senha: ${error.message}`
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Original function to reset password using security question
   const resetPassword = async (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => {
     try {
       // 1. Verify email exists and find user
@@ -520,6 +629,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       deleteAccount,
       checkEmail,
       resetPassword,
+      requestPasswordReset,
+      verifyResetCode,
       isProAccount
     }}>
       {children}
