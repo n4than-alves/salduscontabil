@@ -10,6 +10,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -283,8 +284,102 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteAccount = async () => {
+    try {
+      if (!user) throw new Error('Usuário não autenticado');
+      
+      setLoading(true);
+      
+      // 1. Excluir os dados do usuário em todas as tabelas antes de excluir a conta
+      
+      // Excluir todas as transações do usuário
+      const { error: transactionsError } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('user_id', user.id);
+      
+      if (transactionsError) {
+        console.error('Erro ao excluir transações:', transactionsError);
+      }
+      
+      // Excluir todos os clientes do usuário
+      const { error: clientsError } = await supabase
+        .from('clients')
+        .delete()
+        .eq('user_id', user.id);
+      
+      if (clientsError) {
+        console.error('Erro ao excluir clientes:', clientsError);
+      }
+      
+      // Excluir histórico de login do usuário
+      const { error: loginHistoryError } = await supabase
+        .from('login_history')
+        .delete()
+        .eq('user_id', user.id);
+      
+      if (loginHistoryError) {
+        console.error('Erro ao excluir histórico de login:', loginHistoryError);
+      }
+      
+      // 2. Excluir o perfil do usuário
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', user.id);
+      
+      if (profileError) {
+        console.error('Erro ao excluir perfil:', profileError);
+      }
+      
+      // 3. Finalmente excluir a conta do usuário na autenticação
+      const { error: authError } = await supabase.auth.admin.deleteUser(user.id);
+      
+      if (authError) {
+        // Se falhar com método admin, excluir usando a API normal
+        const { error: deleteError } = await supabase.auth.updateUser({
+          data: { deleted: true }
+        });
+        
+        // Se ambos falharem, forçar o logout e informar ao usuário
+        if (deleteError) {
+          console.error('Erro ao excluir conta:', deleteError);
+          toast({
+            title: 'Erro ao excluir conta',
+            description: 'Não foi possível excluir sua conta completamente. Entre em contato com o suporte.',
+            variant: 'destructive',
+          });
+          await signOut();
+          return;
+        }
+      }
+      
+      toast({
+        title: 'Conta excluída',
+        description: 'Sua conta e todos os dados foram excluídos com sucesso.',
+      });
+      
+      // Limpar estado de auth e fazer logout
+      cleanupAuthState();
+      await supabase.auth.signOut();
+      setUser(null);
+      
+      // Redirecionar para a página de login
+      window.location.href = '/login';
+    } catch (error: any) {
+      console.error('Erro ao excluir conta:', error);
+      toast({
+        title: 'Erro ao excluir conta',
+        description: error.message || 'Ocorreu um erro ao excluir sua conta.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, updateProfile }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, updateProfile, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

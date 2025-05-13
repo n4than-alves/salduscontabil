@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/layouts/AppLayout';
@@ -86,7 +85,7 @@ const SECURITY_QUESTIONS = [
 ];
 
 const Settings = () => {
-  const { user, updateProfile, signOut } = useAuth();
+  const { user, updateProfile, signOut, deleteAccount } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [securityLoading, setSecurityLoading] = useState(false);
@@ -244,28 +243,8 @@ const Settings = () => {
     
     setDeletingAccount(true);
     try {
-      // Primeiro, excluir os dados do usuário nas tabelas relacionadas
-      // Não precisamos fazer isso explicitamente devido às políticas ON DELETE CASCADE
-      
-      // Excluir a conta do usuário na autenticação
-      const { error } = await supabase.auth.admin.deleteUser(user.id);
-      
-      if (error) {
-        // Se falhar com o método admin, tentar com o método padrão
-        const { error: standardError } = await supabase.auth.updateUser({
-          data: { deleted: true }
-        });
-        
-        if (standardError) throw standardError;
-      }
-      
-      toast({
-        title: 'Conta excluída',
-        description: 'Sua conta foi excluída com sucesso. Você será redirecionado para a página de login.',
-      });
-      
-      // Fazer logout e redirecionar para a página de login
-      await signOut();
+      // Chamar a função deleteAccount do contexto de autenticação
+      await deleteAccount();
     } catch (error: any) {
       console.error('Error deleting account:', error);
       toast({
