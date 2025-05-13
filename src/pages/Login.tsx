@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Mail, KeyRound, HelpCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -49,14 +48,14 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
 
 const Login = () => {
-  const { signIn, user } = useAuth();
+  const { signIn, user, checkEmail, resetPassword } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [openResetDialog, setOpenResetDialog] = useState(false);
   const [resetStep, setResetStep] = useState<'email' | 'security' | 'password'>('email');
   const [securityQuestion, setSecurityQuestion] = useState<string>('');
-  const [userId, setUserId] = useState<string | null>(null);
+  const [emailNotFound, setEmailNotFound] = useState<boolean>(false);
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -106,41 +105,24 @@ const Login = () => {
 
     try {
       setIsLoading(true);
+      setEmailNotFound(false);
       
-      // Buscar usuários com este email
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .ilike('email', email);
+      console.log("Checking email:", email);
+      const result = await checkEmail(email);
+      console.log("Email check result:", result);
       
-      if (error) {
-        throw error;
-      }
-      
-      // Verificar se encontrou algum perfil
-      if (!profiles || profiles.length === 0) {
+      if (!result.exists || !result.securityQuestion) {
+        setEmailNotFound(true);
         toast({
-          title: 'Usuário não encontrado',
-          description: 'Não encontramos uma conta com este e-mail.',
+          title: 'E-mail não encontrado',
+          description: 'Não encontramos uma conta com este e-mail ou a conta não possui pergunta de segurança configurada.',
           variant: 'destructive',
         });
         return;
       }
       
-      // Verificar se o perfil tem pergunta de segurança
-      const profile = profiles[0];
-      if (!profile.securityquestion || !profile.securityanswer) {
-        toast({
-          title: 'Recuperação não disponível',
-          description: 'Este usuário não configurou uma pergunta de segurança.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      
-      // Definir a pergunta de segurança e ID do usuário
-      setSecurityQuestion(profile.securityquestion);
-      setUserId(profile.id);
+      // Definir a pergunta de segurança
+      setSecurityQuestion(result.securityQuestion);
       
       // Avançar para a etapa de responder a pergunta de segurança
       setResetStep('security');
@@ -158,8 +140,6 @@ const Login = () => {
   };
 
   const handleVerifySecurityAnswer = async () => {
-    if (!userId) return;
-
     const securityAnswer = resetForm.getValues('securityAnswer');
     
     if (!securityAnswer) {
@@ -169,71 +149,38 @@ const Login = () => {
       return;
     }
 
-    try {
-      setIsLoading(true);
-      
-      // Buscar o perfil do usuário para verificar a resposta
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('securityanswer')
-        .eq('id', userId)
-        .single();
-      
-      if (error) {
-        throw error;
-      }
-      
-      // Verificar se a resposta está correta (case insensitive)
-      if (profile.securityanswer.toLowerCase() !== securityAnswer.toLowerCase()) {
-        toast({
-          title: 'Resposta incorreta',
-          description: 'A resposta à pergunta de segurança está incorreta.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      
-      // Avançar para a etapa de redefinir a senha
-      setResetStep('password');
-      
-    } catch (error: any) {
-      console.error('Erro ao verificar resposta:', error);
-      toast({
-        title: 'Erro',
-        description: 'Ocorreu um erro ao verificar sua resposta. Tente novamente.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    // Avançar para a etapa de redefinir a senha
+    // A verificação real será feita na etapa final
+    setResetStep('password');
   };
 
   const handleResetPassword = async () => {
-    if (!userId) return;
+    const { email, securityAnswer, newPassword } = resetForm.getValues();
+    
+    if (newPassword !== resetForm.getValues('confirmPassword')) {
+      resetForm.setError('confirmPassword', { 
+        message: 'As senhas não conferem' 
+      });
+      return;
+    }
     
     try {
       setIsLoading(true);
       
-      const { newPassword } = resetForm.getValues();
+      // Call the resetPassword function from AuthContext
+      const success = await resetPassword(
+        email,
+        securityQuestion,
+        securityAnswer,
+        newPassword
+      );
       
-      // Atualizar a senha do usuário
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-      
-      if (error) {
-        throw error;
+      if (success) {
+        // Reset the form and close the dialog
+        resetForm.reset();
+        setOpenResetDialog(false);
+        setResetStep('email');
       }
-      
-      toast({
-        title: 'Senha alterada',
-        description: 'Sua senha foi alterada com sucesso. Você já pode fazer login.',
-      });
-      
-      // Resetar o formulário e fechar o diálogo
-      resetForm.reset();
-      setOpenResetDialog(false);
-      setResetStep('email');
       
     } catch (error: any) {
       console.error('Erro na redefinição de senha:', error);
@@ -251,6 +198,7 @@ const Login = () => {
     setOpenResetDialog(false);
     setResetStep('email');
     resetForm.reset();
+    setEmailNotFound(false);
   };
 
   if (user) {
@@ -334,6 +282,11 @@ const Login = () => {
                                   </div>
                                 </FormControl>
                                 <FormMessage />
+                                {emailNotFound && (
+                                  <p className="text-sm text-red-500 mt-1">
+                                    E-mail não encontrado. Verifique se digitou corretamente.
+                                  </p>
+                                )}
                               </FormItem>
                             )}
                           />

@@ -1,5 +1,5 @@
 
-// Import from the actual source instead of circular reference
+// Direct import from actual source
 import { useToast, toast } from "@/hooks/use-toast";
 
 export { useToast, toast };

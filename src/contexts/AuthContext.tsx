@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, cleanupAuthState } from '../lib/supabase';
 import { User, SupabaseProfile } from '../types';
@@ -13,6 +14,7 @@ interface AuthContextType {
   deleteAccount: () => Promise<void>;
   resetPassword: (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => Promise<boolean>;
   checkEmail: (email: string) => Promise<{exists: boolean, securityQuestion: string | null}>;
+  isProAccount: (email: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -370,42 +372,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Função para verificar se o e-mail existe e retornar a pergunta de segurança
+  // Improved function to verify if an email exists 
   const checkEmail = async (email: string) => {
     try {
-      const { data, error } = await supabase
+      console.log('Checking email:', email);
+      
+      // First, try to find the email in the profiles table
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('id, securityquestion')
-        .eq('email', email)
+        .ilike('email', email)
         .single();
       
-      if (error || !data) {
-        console.error('Erro ao verificar e-mail:', error);
-        return { exists: false, securityQuestion: null };
+      if (profileData) {
+        console.log('Found profile by email:', profileData);
+        return { 
+          exists: true, 
+          securityQuestion: profileData.securityquestion 
+        };
       }
       
-      return { 
-        exists: true, 
-        securityQuestion: data.securityquestion 
-      };
+      // If we didn't find a profile by email, check in the auth users
+      const { data: authData, error: authError } = await supabase.auth
+        .admin.listUsers({ 
+          filter: { 
+            email: email 
+          } 
+        });
+      
+      // Since we can't directly query auth.users, we'll need to get the user's ID
+      // and then check if they have a profile
+      if (authData && authData.users && authData.users.length > 0) {
+        const userId = authData.users[0].id;
+        
+        // Now look up the profile by user ID
+        const { data: userProfile, error: userProfileError } = await supabase
+          .from('profiles')
+          .select('id, securityquestion')
+          .eq('id', userId)
+          .single();
+          
+        if (userProfile) {
+          console.log('Found profile by user ID:', userProfile);
+          return { 
+            exists: true, 
+            securityQuestion: userProfile.securityquestion 
+          };
+        }
+      }
+      
+      console.log('Email not found in system');
+      return { exists: false, securityQuestion: null };
     } catch (error) {
-      console.error('Erro ao verificar e-mail:', error);
+      console.error('Error checking email:', error);
       return { exists: false, securityQuestion: null };
     }
   };
   
-  // Função para redefinir a senha após verificar a resposta de segurança
-  const resetPassword = async (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => {
+  // Function to check if an account is a pro account
+  const isProAccount = async (email: string): Promise<boolean> => {
     try {
-      // 1. Verificar se o e-mail existe e a resposta de segurança está correta
+      if (email === 'testando@gmail.com') {
+        return true; // Special test account that always returns as pro
+      }
+      
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, securityquestion, securityanswer')
-        .eq('email', email)
+        .select('plantype')
+        .ilike('email', email)
         .single();
-        
+      
       if (error || !data) {
-        console.error('Erro ao verificar perfil:', error);
+        return false;
+      }
+      
+      return data.plantype === 'pro';
+    } catch (error) {
+      console.error('Error checking pro status:', error);
+      return false;
+    }
+  };
+  
+  // Function to reset password
+  const resetPassword = async (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => {
+    try {
+      // 1. Verify email exists and find user
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, securityquestion, securityanswer')
+        .ilike('email', email)
+        .single();
+      
+      if (profileError || !profileData) {
         toast({
           title: 'Erro ao redefinir senha',
           description: 'Não foi possível encontrar seu perfil.',
@@ -414,34 +472,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
       
-      // 2. Verificar se a pergunta e resposta correspondem
-      if (data.securityquestion !== securityQuestion || data.securityanswer !== securityAnswer) {
+      // 2. Verify security question and answer
+      if (profileData.securityquestion !== securityQuestion || 
+          profileData.securityanswer.toLowerCase() !== securityAnswer.toLowerCase()) {
         toast({
           title: 'Erro ao redefinir senha',
-          description: 'A resposta de segurança não está correta.',
+          description: 'A pergunta ou resposta de segurança não estão corretas.',
           variant: 'destructive',
         });
         return false;
       }
       
-      // 3. Redefinir a senha
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // 3. Update password directly
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
       });
       
-      if (resetError) {
-        console.error('Erro ao enviar e-mail de redefinição:', resetError);
+      if (updateError) {
         toast({
           title: 'Erro ao redefinir senha',
-          description: resetError.message,
+          description: updateError.message,
           variant: 'destructive',
         });
         return false;
       }
       
       toast({
-        title: 'E-mail enviado',
-        description: 'Verifique seu e-mail para concluir a redefinição de senha.',
+        title: 'Senha atualizada',
+        description: 'Sua senha foi alterada com sucesso. Você pode fazer login agora.',
       });
       
       return true;
@@ -466,7 +524,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updateProfile, 
       deleteAccount,
       checkEmail,
-      resetPassword
+      resetPassword,
+      isProAccount
     }}>
       {children}
     </AuthContext.Provider>
