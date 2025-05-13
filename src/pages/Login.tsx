@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -258,7 +257,8 @@ const Login = () => {
         .maybeSingle(); // Using maybeSingle instead of single to handle no results gracefully
         
       console.log('Profile query result:', { profileByEmail, profileEmailError });
-        
+      
+      // If the case-insensitive search didn't find a result, try with exact match
       if (profileEmailError || !profileByEmail) {
         // Fallback: Try with direct email match
         const { data: exactProfileMatch, error: exactMatchError } = await supabase
@@ -280,28 +280,13 @@ const Login = () => {
         }
         
         // Use the exact match result if found
-        profileByEmail = exactProfileMatch;
-      }
-      
-      if (!profileByEmail.securityquestion || !profileByEmail.securityanswer) {
-        toast({
-          title: 'Recuperação não disponível',
-          description: 'Este usuário não configurou uma pergunta de segurança.',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
+        processUserProfile(exactProfileMatch);
         return;
       }
       
-      setSecurityQuestion(profileByEmail.securityquestion);
-      setCorrectAnswer(profileByEmail.securityanswer.toLowerCase().trim());
-      setUserId(profileByEmail.id);
+      // Process the profile found with case-insensitive search
+      processUserProfile(profileByEmail);
       
-      // Gerar opções de resposta aleatórias incluindo a correta
-      const options = generateMultipleChoices(profileByEmail.securityanswer);
-      setAnswerOptions(options);
-      
-      setIsLoading(false);
     } catch (error) {
       console.error('Erro ao buscar pergunta de segurança:', error);
       setIsLoading(false);
@@ -311,6 +296,29 @@ const Login = () => {
         variant: 'destructive',
       });
     }
+  };
+  
+  // Helper function to process user profile data
+  const processUserProfile = (profile: any) => {
+    if (!profile.securityquestion || !profile.securityanswer) {
+      toast({
+        title: 'Recuperação não disponível',
+        description: 'Este usuário não configurou uma pergunta de segurança.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+      return;
+    }
+    
+    setSecurityQuestion(profile.securityquestion);
+    setCorrectAnswer(profile.securityanswer.toLowerCase().trim());
+    setUserId(profile.id);
+    
+    // Gerar opções de resposta aleatórias incluindo a correta
+    const options = generateMultipleChoices(profile.securityanswer);
+    setAnswerOptions(options);
+    
+    setIsLoading(false);
   };
   
   const handleRecoveryStart = () => {
