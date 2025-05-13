@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, cleanupAuthState } from '../lib/supabase';
 import { User, SupabaseProfile } from '../types';
@@ -377,7 +376,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Checking email:', email);
       
-      // First, try to find the email in the profiles table
+      // Look for the email directly in the profiles table
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('id, securityquestion')
@@ -392,33 +391,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
       
-      // If we didn't find a profile by email, check in the auth users
+      // If we didn't find the email in profiles, try to find the user in auth
+      // NOTE: This approach doesn't use the admin.listUsers with filter which was causing the error
       const { data: authData, error: authError } = await supabase.auth
-        .admin.listUsers({ 
-          filter: { 
-            email: email 
-          } 
+        .signInWithOtp({
+          email: email,
+          options: {
+            shouldCreateUser: false
+          }
         });
       
-      // Since we can't directly query auth.users, we'll need to get the user's ID
-      // and then check if they have a profile
-      if (authData && authData.users && authData.users.length > 0) {
-        const userId = authData.users[0].id;
-        
-        // Now look up the profile by user ID
-        const { data: userProfile, error: userProfileError } = await supabase
+      // If we reached here without error and OTP was sent, it means the user exists
+      if (!authError) {
+        // Now try to get the security question
+        const { data: userProfile } = await supabase
           .from('profiles')
-          .select('id, securityquestion')
-          .eq('id', userId)
+          .select('securityquestion')
+          .eq('email', email)
           .single();
           
-        if (userProfile) {
-          console.log('Found profile by user ID:', userProfile);
-          return { 
-            exists: true, 
-            securityQuestion: userProfile.securityquestion 
-          };
-        }
+        return { 
+          exists: true, 
+          securityQuestion: userProfile?.securityquestion || null
+        };
       }
       
       console.log('Email not found in system');
