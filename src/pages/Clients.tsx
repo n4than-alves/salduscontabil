@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -49,12 +48,18 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const clientSchema = z.object({
-  name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres'),
-  email: z.string().email('E-mail inválido').optional().or(z.literal('')),
+  name: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres'),
+  email: z.string().email({ message: 'E-mail inválido' }).optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
+
+interface WeeklyLimit {
+  count: number;
+  limit: number;
+  canCreate: boolean;
+}
 
 const Clients = () => {
   const { user } = useAuth();
@@ -65,6 +70,11 @@ const Clients = () => {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [weeklyLimit, setWeeklyLimit] = useState<WeeklyLimit>({
+    count: 0,
+    limit: 5,
+    canCreate: true,
+  });
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
@@ -80,13 +90,11 @@ const Clients = () => {
 
     setIsLoading(true);
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('clients')
         .select('*')
         .eq('user_id', user.id)
         .order('name');
-
-      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -100,14 +108,55 @@ const Clients = () => {
       });
     } finally {
       setIsLoading(false);
+      checkWeeklyClientLimit();
+    }
+  };
+
+  const checkWeeklyClientLimit = async () => {
+    if (!user) return;
+
+    try {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      
+      const { count, error } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', oneWeekAgo.toISOString());
+
+      if (error) throw error;
+
+      const weeklyLimit = user.planType === 'free' ? 5 : Infinity;
+      const canCreate = user.planType === 'pro' || (count as number) < weeklyLimit;
+
+      setWeeklyLimit({
+        count: count as number,
+        limit: weeklyLimit,
+        canCreate
+      });
+    } catch (error) {
+      console.error('Error checking weekly limit:', error);
     }
   };
 
   useEffect(() => {
-    loadClients();
+    if (user) {
+      loadClients();
+      checkWeeklyClientLimit();
+    }
   }, [user]);
 
   const handleOpenDialog = (client?: Client) => {
+    if (!weeklyLimit.canCreate && !client && user?.planType === 'free') {
+      toast({
+        title: 'Limite de clientes atingido',
+        description: 'Você atingiu o limite de 5 clientes semanais no plano gratuito. Atualize para o Plano Pro para ter clientes ilimitados.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (client) {
       setEditingClient(client);
       form.reset({
@@ -129,33 +178,38 @@ const Clients = () => {
   const handleSubmit = async (data: ClientFormValues) => {
     if (!user) return;
 
+    if (!editingClient && user.planType === 'free' && !weeklyLimit.canCreate) {
+      toast({
+        title: 'Limite de clientes atingido',
+        description: 'Você atingiu o limite de 5 clientes semanais no plano gratuito. Atualize para o Plano Pro para ter clientes ilimitados.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      const clientData = {
+        user_id: user.id,
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+      };
+
       if (editingClient) {
-        // Update existing client
         const { error } = await supabase
           .from('clients')
-          .update({
-            name: data.name,
-            email: data.email || null,
-            phone: data.phone || null,
-          })
+          .update(clientData)
           .eq('id', editingClient.id);
 
         if (error) throw error;
 
         toast({
           title: 'Cliente atualizado',
-          description: 'Os dados do cliente foram atualizados com sucesso.',
+          description: 'O cliente foi atualizado com sucesso.',
         });
       } else {
-        // Create new client
-        const { error } = await supabase.from('clients').insert({
-          user_id: user.id,
-          name: data.name,
-          email: data.email || null,
-          phone: data.phone || null,
-        });
+        const { error } = await supabase.from('clients').insert(clientData);
 
         if (error) throw error;
 
@@ -167,6 +221,7 @@ const Clients = () => {
 
       setOpenDialog(false);
       loadClients();
+      checkWeeklyClientLimit();
     } catch (error: any) {
       console.error('Error saving client:', error);
       toast({
@@ -191,6 +246,7 @@ const Clients = () => {
       });
 
       loadClients();
+      checkWeeklyClientLimit();
     } catch (error: any) {
       console.error('Error deleting client:', error);
       toast({
@@ -203,8 +259,8 @@ const Clients = () => {
 
   const filteredClients = clients.filter((client) =>
     client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.phone?.includes(searchQuery)
+    (client.email?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (client.phone?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -226,7 +282,11 @@ const Clients = () => {
           </div>
           <Dialog open={openDialog} onOpenChange={setOpenDialog}>
             <DialogTrigger asChild>
-              <Button className="gap-1 bg-saldus-600 hover:bg-saldus-700" onClick={() => handleOpenDialog()}>
+              <Button 
+                className="gap-1 bg-saldus-600 hover:bg-saldus-700" 
+                onClick={() => handleOpenDialog()}
+                disabled={!weeklyLimit.canCreate && user?.planType === 'free'}
+              >
                 <Plus className="h-4 w-4" /> Novo
               </Button>
             </DialogTrigger>
@@ -248,7 +308,7 @@ const Clients = () => {
                       <FormItem>
                         <FormLabel>Nome</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input placeholder="Nome do cliente" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -261,7 +321,7 @@ const Clients = () => {
                       <FormItem>
                         <FormLabel>E-mail</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input type="email" placeholder="email@example.com" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -274,16 +334,16 @@ const Clients = () => {
                       <FormItem>
                         <FormLabel>Telefone</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input placeholder="(99) 99999-9999" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                   <DialogFooter>
-                    <Button 
-                      variant="outline" 
-                      type="button" 
+                    <Button
+                      variant="outline"
+                      type="button"
                       onClick={() => setOpenDialog(false)}
                     >
                       Cancelar
@@ -335,7 +395,7 @@ const Clients = () => {
               ) : (
                 filteredClients.map((client) => (
                   <TableRow key={client.id}>
-                    <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell>{client.name}</TableCell>
                     <TableCell>{client.email || '-'}</TableCell>
                     <TableCell>{client.phone || '-'}</TableCell>
                     <TableCell className="text-right">
@@ -359,9 +419,8 @@ const Clients = () => {
                                 Confirmar exclusão
                               </AlertDialogTitle>
                               <AlertDialogDescription>
-                                Tem certeza que deseja excluir o cliente{' '}
-                                <strong>{client.name}</strong>? Esta ação não
-                                pode ser desfeita.
+                                Tem certeza que deseja excluir este cliente?
+                                Esta ação não pode ser desfeita.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

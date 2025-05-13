@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -140,7 +141,7 @@ const Login = () => {
       setIsLoading(true);
       
       // Verificar se a resposta selecionada está correta
-      if (data.securityAnswer !== correctAnswer) {
+      if (data.securityAnswer.toLowerCase() !== correctAnswer) {
         toast({
           title: 'Verificação falhou',
           description: 'Resposta de segurança incorreta.',
@@ -177,49 +178,19 @@ const Login = () => {
       
       setIsLoading(true);
       
-      // Buscar o e-mail do usuário pelo ID
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('id', userId)
-        .single();
-      
-      if (profileError || !profile?.email) {
-        toast({
-          title: 'Erro na redefinição',
-          description: 'Não foi possível encontrar seu e-mail.',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
-      }
-      
-      // Atualizar a senha do usuário usando updateUser da API Auth
+      // Atualizar a senha do usuário
       const { error } = await supabase.auth.updateUser({
         password: data.newPassword
       });
       
       if (error) {
-        // Se não funcionar com updateUser, tentar com resetPasswordForEmail
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-          profile.email,
-          { redirectTo: window.location.origin + '/login' }
-        );
-        
-        if (resetError) {
-          throw new Error('Não foi possível redefinir sua senha. Entre em contato com o suporte.');
-        } else {
-          toast({
-            title: 'E-mail enviado',
-            description: 'Um e-mail de redefinição de senha foi enviado para o seu endereço de e-mail.',
-          });
-        }
-      } else {
-        toast({
-          title: 'Senha alterada',
-          description: 'Sua senha foi alterada com sucesso. Você já pode fazer login.',
-        });
-      }
+        throw new Error('Não foi possível redefinir sua senha: ' + error.message);
+      } 
+      
+      toast({
+        title: 'Senha alterada',
+        description: 'Sua senha foi alterada com sucesso. Você já pode fazer login.',
+      });
       
       setShowResetForm(false);
       setOpenResetDialog(false);
@@ -249,58 +220,56 @@ const Login = () => {
     try {
       setIsLoading(true);
       
-      // First try: case-insensitive search using ilike
-      const { data: profileByEmail, error: profileEmailError } = await supabase
-        .from('profiles')
-        .select('*')
-        .ilike('email', email)
-        .maybeSingle();
-        
-      console.log('Case-insensitive profile query result:', { profileByEmail, profileEmailError });
-      
-      if (!profileEmailError && profileByEmail) {
-        return processUserProfile(profileByEmail);
-      }
-      
-      // Second try: direct email match
-      const { data: exactProfileMatch, error: exactMatchError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle();
-        
-      console.log('Exact match query result:', { exactProfileMatch, exactMatchError });
-      
-      if (!exactMatchError && exactProfileMatch) {
-        return processUserProfile(exactProfileMatch);
-      }
-      
-      // Third try: Try to find any email that includes this string (broader search)
-      const { data: allProfiles, error: allProfilesError } = await supabase
+      // Primeiro, buscar perfis por email (case-insensitive)
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('*');
-        
-      console.log('All profiles result length:', allProfiles?.length);
       
-      if (!allProfilesError && allProfiles) {
-        // Manual case-insensitive search (backup method)
-        const matchingProfile = allProfiles.find(p => 
-          p.email && p.email.toLowerCase() === email.toLowerCase()
-        );
-        
-        if (matchingProfile) {
-          return processUserProfile(matchingProfile);
-        }
+      if (profilesError) {
+        throw profilesError;
       }
       
-      // No matching profile found
-      toast({
-        title: 'Usuário não encontrado',
-        description: 'E-mail não encontrado no sistema.',
-        variant: 'destructive',
-      });
+      console.log('All profiles received:', profiles?.length);
+      
+      // Buscar manualmente o perfil com o email correspondente (case-insensitive)
+      const matchingProfile = profiles?.find(profile => 
+        profile.email && profile.email.toLowerCase() === email.toLowerCase()
+      );
+      
+      if (!matchingProfile) {
+        toast({
+          title: 'Usuário não encontrado',
+          description: 'E-mail não encontrado no sistema.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return false;
+      }
+      
+      console.log('Found matching profile:', matchingProfile);
+      
+      // Verificar se o perfil tem pergunta de segurança configurada
+      if (!matchingProfile.securityquestion || !matchingProfile.securityanswer) {
+        toast({
+          title: 'Recuperação não disponível',
+          description: 'Este usuário não configurou uma pergunta de segurança.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return false;
+      }
+      
+      // Configurar os dados para a recuperação
+      setSecurityQuestion(matchingProfile.securityquestion);
+      setCorrectAnswer(matchingProfile.securityanswer.toLowerCase().trim());
+      setUserId(matchingProfile.id);
+      
+      // Gerar opções de resposta aleatórias incluindo a correta
+      const options = generateMultipleChoices(matchingProfile.securityanswer);
+      setAnswerOptions(options);
+      
       setIsLoading(false);
-      return false;
+      return true;
     } catch (error) {
       console.error('Erro ao buscar pergunta de segurança:', error);
       setIsLoading(false);
@@ -311,30 +280,6 @@ const Login = () => {
       });
       return false;
     }
-  };
-  
-  // Helper function to process user profile data
-  const processUserProfile = (profile: any) => {
-    if (!profile.securityquestion || !profile.securityanswer) {
-      toast({
-        title: 'Recuperação não disponível',
-        description: 'Este usuário não configurou uma pergunta de segurança.',
-        variant: 'destructive',
-      });
-      setIsLoading(false);
-      return false;
-    }
-    
-    setSecurityQuestion(profile.securityquestion);
-    setCorrectAnswer(profile.securityanswer.toLowerCase().trim());
-    setUserId(profile.id);
-    
-    // Gerar opções de resposta aleatórias incluindo a correta
-    const options = generateMultipleChoices(profile.securityanswer);
-    setAnswerOptions(options);
-    
-    setIsLoading(false);
-    return true;
   };
   
   const handleRecoveryStart = () => {

@@ -32,7 +32,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, Trash2, Search, Calendar, ArrowUp, ArrowDown, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Calendar, ArrowUp, ArrowDown, Loader2, FileExport } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -276,19 +276,23 @@ const Transactions = () => {
 
     setIsSubmitting(true);
     try {
-      // Fix date handling to ensure correct date is saved
-      // By using the date string directly without any timezone adjustments
+      // Fix date handling by adding one day to the selected date
+      const selectedDate = new Date(data.date);
+      selectedDate.setDate(selectedDate.getDate() + 1); // Add one day to fix timezone issues
+      const correctedDate = selectedDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      
+      console.log('Original date:', data.date);
+      console.log('Corrected date for saving:', correctedDate);
+
       const transactionData = {
         user_id: user.id,
         amount: parseFloat(data.amount),
         type: data.type,
         category: data.category,
         description: data.description,
-        date: data.date, // Using the date string directly
+        date: correctedDate, // Using the corrected date
         client_id: data.client_id === 'none' ? null : data.client_id,
       };
-
-      console.log('Saving transaction with date:', data.date);
 
       if (editingTransaction) {
         // Update existing transaction
@@ -359,6 +363,58 @@ const Transactions = () => {
     transaction.client?.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // New function to export transactions to CSV
+  const exportToCSV = () => {
+    if (transactions.length === 0) {
+      toast({
+        title: 'Sem dados para exportar',
+        description: 'Não há movimentações para exportar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Create CSV header
+      let csvContent = "Data,Descrição,Categoria,Cliente,Tipo,Valor\n";
+      
+      // Add data rows
+      filteredTransactions.forEach(transaction => {
+        const date = new Date(transaction.date).toLocaleDateString();
+        const description = `"${transaction.description.replace(/"/g, '""')}"`;
+        const category = transaction.category;
+        const client = transaction.client?.name || '-';
+        const type = transaction.type === 'income' ? 'Receita' : 'Despesa';
+        const amount = transaction.amount;
+        
+        csvContent += `${date},${description},${category},${client},${type},${amount}\n`;
+      });
+      
+      // Create a blob and download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `movimentacoes_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: 'Exportação concluída',
+        description: 'Relatório de movimentações exportado com sucesso.',
+      });
+    } catch (error) {
+      console.error('Error exporting transactions:', error);
+      toast({
+        title: 'Erro na exportação',
+        description: 'Ocorreu um erro ao exportar as movimentações.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <AppLayout>
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -376,6 +432,12 @@ const Transactions = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <Button 
+            className="gap-1 bg-saldus-600 hover:bg-saldus-700" 
+            onClick={exportToCSV}
+          >
+            <FileExport className="h-4 w-4" /> Exportar
+          </Button>
           <Dialog open={openDialog} onOpenChange={setOpenDialog}>
             <DialogTrigger asChild>
               <Button 

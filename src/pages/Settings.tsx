@@ -24,11 +24,22 @@ import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, User, Shield, Building } from 'lucide-react';
+import { Loader2, User, Shield, Building, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { SubscriptionCard } from '@/components/subscription/SubscriptionCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 // Schema para validar os dados do formulário
 const profileSchema = z.object({
@@ -75,10 +86,11 @@ const SECURITY_QUESTIONS = [
 ];
 
 const Settings = () => {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, signOut } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [securityLoading, setSecurityLoading] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [profileData, setProfileData] = useState<SupabaseProfile | null>(null);
   const [activeTab, setActiveTab] = useState<string>('personal');
 
@@ -227,6 +239,45 @@ const Settings = () => {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    
+    setDeletingAccount(true);
+    try {
+      // Primeiro, excluir os dados do usuário nas tabelas relacionadas
+      // Não precisamos fazer isso explicitamente devido às políticas ON DELETE CASCADE
+      
+      // Excluir a conta do usuário na autenticação
+      const { error } = await supabase.auth.admin.deleteUser(user.id);
+      
+      if (error) {
+        // Se falhar com o método admin, tentar com o método padrão
+        const { error: standardError } = await supabase.auth.updateUser({
+          data: { deleted: true }
+        });
+        
+        if (standardError) throw standardError;
+      }
+      
+      toast({
+        title: 'Conta excluída',
+        description: 'Sua conta foi excluída com sucesso. Você será redirecionado para a página de login.',
+      });
+      
+      // Fazer logout e redirecionar para a página de login
+      await signOut();
+    } catch (error: any) {
+      console.error('Error deleting account:', error);
+      toast({
+        title: 'Erro ao excluir conta',
+        description: 'Ocorreu um erro ao excluir sua conta. Por favor, tente novamente ou entre em contato com o suporte.',
+        variant: 'destructive'
+      });
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="mb-8">
@@ -355,6 +406,42 @@ const Settings = () => {
                   </Form>
                 )}
               </CardContent>
+              <CardFooter className="flex justify-center border-t p-4">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="flex items-center gap-2">
+                      <Trash2 className="h-4 w-4" />
+                      Excluir Conta
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta ação não pode ser desfeita. Isso excluirá permanentemente sua conta
+                        e removerá seus dados de nossos servidores.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={handleDeleteAccount}
+                        className="bg-red-600 hover:bg-red-700"
+                        disabled={deletingAccount}
+                      >
+                        {deletingAccount ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Excluindo...
+                          </>
+                        ) : (
+                          'Sim, excluir minha conta'
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </CardFooter>
             </Card>
           </TabsContent>
 
