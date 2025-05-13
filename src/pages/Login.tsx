@@ -249,44 +249,58 @@ const Login = () => {
     try {
       setIsLoading(true);
       
-      // Improved approach: Query the profiles table with a case-insensitive email match
+      // First try: case-insensitive search using ilike
       const { data: profileByEmail, error: profileEmailError } = await supabase
         .from('profiles')
         .select('*')
-        .ilike('email', email) // Using ilike for case-insensitive matching
-        .maybeSingle(); // Using maybeSingle instead of single to handle no results gracefully
+        .ilike('email', email)
+        .maybeSingle();
         
-      console.log('Profile query result:', { profileByEmail, profileEmailError });
+      console.log('Case-insensitive profile query result:', { profileByEmail, profileEmailError });
       
-      // If the case-insensitive search didn't find a result, try with exact match
-      if (profileEmailError || !profileByEmail) {
-        // Fallback: Try with direct email match
-        const { data: exactProfileMatch, error: exactMatchError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', email)
-          .single();
-          
-        console.log('Exact match query result:', { exactProfileMatch, exactMatchError });
-          
-        if (exactMatchError || !exactProfileMatch) {
-          toast({
-            title: 'Usuário não encontrado',
-            description: 'E-mail não encontrado no sistema.',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        // Use the exact match result if found
-        processUserProfile(exactProfileMatch);
-        return;
+      if (!profileEmailError && profileByEmail) {
+        return processUserProfile(profileByEmail);
       }
       
-      // Process the profile found with case-insensitive search
-      processUserProfile(profileByEmail);
+      // Second try: direct email match
+      const { data: exactProfileMatch, error: exactMatchError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+        
+      console.log('Exact match query result:', { exactProfileMatch, exactMatchError });
       
+      if (!exactMatchError && exactProfileMatch) {
+        return processUserProfile(exactProfileMatch);
+      }
+      
+      // Third try: Try to find any email that includes this string (broader search)
+      const { data: allProfiles, error: allProfilesError } = await supabase
+        .from('profiles')
+        .select('*');
+        
+      console.log('All profiles result length:', allProfiles?.length);
+      
+      if (!allProfilesError && allProfiles) {
+        // Manual case-insensitive search (backup method)
+        const matchingProfile = allProfiles.find(p => 
+          p.email && p.email.toLowerCase() === email.toLowerCase()
+        );
+        
+        if (matchingProfile) {
+          return processUserProfile(matchingProfile);
+        }
+      }
+      
+      // No matching profile found
+      toast({
+        title: 'Usuário não encontrado',
+        description: 'E-mail não encontrado no sistema.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+      return false;
     } catch (error) {
       console.error('Erro ao buscar pergunta de segurança:', error);
       setIsLoading(false);
@@ -295,6 +309,7 @@ const Login = () => {
         description: 'Ocorreu um erro ao buscar seus dados. Tente novamente.',
         variant: 'destructive',
       });
+      return false;
     }
   };
   
@@ -307,7 +322,7 @@ const Login = () => {
         variant: 'destructive',
       });
       setIsLoading(false);
-      return;
+      return false;
     }
     
     setSecurityQuestion(profile.securityquestion);
@@ -319,6 +334,7 @@ const Login = () => {
     setAnswerOptions(options);
     
     setIsLoading(false);
+    return true;
   };
   
   const handleRecoveryStart = () => {

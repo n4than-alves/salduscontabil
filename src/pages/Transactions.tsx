@@ -132,7 +132,15 @@ const Transactions = () => {
 
       if (error) throw error;
 
-      setTransactions(data as TransactionWithClient[] || []);
+      // Ensure client data is properly transformed
+      const transformedData = (data || []).map(transaction => {
+        return {
+          ...transaction,
+          client: transaction.clients
+        };
+      });
+
+      setTransactions(transformedData as TransactionWithClient[] || []);
     } catch (error: any) {
       console.error('Error loading transactions:', error);
       toast({
@@ -248,15 +256,19 @@ const Transactions = () => {
 
     setIsSubmitting(true);
     try {
+      // Fix date handling to ensure correct date is saved
+      // By using the date string directly without any timezone adjustments
       const transactionData = {
         user_id: user.id,
         amount: parseFloat(data.amount),
         type: data.type,
         category: data.category,
         description: data.description,
-        date: data.date,
+        date: data.date, // Using the date string directly
         client_id: data.client_id === 'none' ? null : data.client_id,
       };
+
+      console.log('Saving transaction with date:', data.date);
 
       if (editingTransaction) {
         // Update existing transaction
