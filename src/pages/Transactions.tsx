@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -32,7 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, Trash2, Search, Calendar, ArrowUp, ArrowDown, Loader2, FileExport } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Calendar, ArrowUp, ArrowDown, Loader2, FileText } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -436,7 +435,7 @@ const Transactions = () => {
             className="gap-1 bg-saldus-600 hover:bg-saldus-700" 
             onClick={exportToCSV}
           >
-            <FileExport className="h-4 w-4" /> Exportar
+            <FileText className="h-4 w-4" /> Exportar
           </Button>
           <Dialog open={openDialog} onOpenChange={setOpenDialog}>
             <DialogTrigger asChild>

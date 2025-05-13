@@ -4,6 +4,25 @@ import { renderHook, act } from '@testing-library/react-hooks';
 import { AuthProvider, useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabase';
 
+// Add TypeScript declaration for Jest
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace jest {
+    interface MockInstance {}
+  }
+  
+  const jest: {
+    fn: () => jest.MockInstance;
+    clearAllMocks: () => void;
+    mock: any;
+  }
+  
+  const describe: (name: string, fn: () => void) => void;
+  const beforeEach: (fn: () => void) => void;
+  const it: (name: string, fn: () => void | Promise<void>) => void;
+  const expect: any;
+}
+
 // Mock supabase
 jest.mock('@/lib/supabase', () => ({
   supabase: {
@@ -70,7 +89,7 @@ describe('AuthContext', () => {
   });
 
   it('should handle sign in', async () => {
-    (supabase.auth.signInWithPassword as jest.Mock).mockResolvedValue({
+    (supabase.auth.signInWithPassword as jest.MockInstance).mockResolvedValue({
       data: { user: { id: '123', email: 'test@example.com' } },
       error: null
     });
@@ -91,7 +110,7 @@ describe('AuthContext', () => {
   });
 
   it('should handle sign up', async () => {
-    (supabase.auth.signUp as jest.Mock).mockResolvedValue({
+    (supabase.auth.signUp as jest.MockInstance).mockResolvedValue({
       data: { user: { id: '123', email: 'test@example.com' } },
       error: null
     });
@@ -117,7 +136,7 @@ describe('AuthContext', () => {
   });
 
   it('should handle sign out', async () => {
-    (supabase.auth.signOut as jest.Mock).mockResolvedValue({
+    (supabase.auth.signOut as jest.MockInstance).mockResolvedValue({
       error: null
     });
     
