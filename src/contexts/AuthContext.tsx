@@ -11,6 +11,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   deleteAccount: () => Promise<void>;
+  resetPassword: (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => Promise<boolean>;
+  checkEmail: (email: string) => Promise<{exists: boolean, securityQuestion: string | null}>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -312,16 +314,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Erro ao excluir clientes:', clientsError);
       }
       
-      // Excluir histórico de login do usuário
-      const { error: loginHistoryError } = await supabase
-        .from('login_history')
-        .delete()
-        .eq('user_id', user.id);
-      
-      if (loginHistoryError) {
-        console.error('Erro ao excluir histórico de login:', loginHistoryError);
-      }
-      
       // 2. Excluir o perfil do usuário
       const { error: profileError } = await supabase
         .from('profiles')
@@ -378,8 +370,104 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Função para verificar se o e-mail existe e retornar a pergunta de segurança
+  const checkEmail = async (email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, securityquestion')
+        .eq('email', email)
+        .single();
+      
+      if (error || !data) {
+        console.error('Erro ao verificar e-mail:', error);
+        return { exists: false, securityQuestion: null };
+      }
+      
+      return { 
+        exists: true, 
+        securityQuestion: data.securityquestion 
+      };
+    } catch (error) {
+      console.error('Erro ao verificar e-mail:', error);
+      return { exists: false, securityQuestion: null };
+    }
+  };
+  
+  // Função para redefinir a senha após verificar a resposta de segurança
+  const resetPassword = async (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => {
+    try {
+      // 1. Verificar se o e-mail existe e a resposta de segurança está correta
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, securityquestion, securityanswer')
+        .eq('email', email)
+        .single();
+        
+      if (error || !data) {
+        console.error('Erro ao verificar perfil:', error);
+        toast({
+          title: 'Erro ao redefinir senha',
+          description: 'Não foi possível encontrar seu perfil.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+      
+      // 2. Verificar se a pergunta e resposta correspondem
+      if (data.securityquestion !== securityQuestion || data.securityanswer !== securityAnswer) {
+        toast({
+          title: 'Erro ao redefinir senha',
+          description: 'A resposta de segurança não está correta.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+      
+      // 3. Redefinir a senha
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (resetError) {
+        console.error('Erro ao enviar e-mail de redefinição:', resetError);
+        toast({
+          title: 'Erro ao redefinir senha',
+          description: resetError.message,
+          variant: 'destructive',
+        });
+        return false;
+      }
+      
+      toast({
+        title: 'E-mail enviado',
+        description: 'Verifique seu e-mail para concluir a redefinição de senha.',
+      });
+      
+      return true;
+    } catch (error: any) {
+      console.error('Erro ao redefinir senha:', error);
+      toast({
+        title: 'Erro ao redefinir senha',
+        description: error.message || 'Ocorreu um erro ao redefinir sua senha.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, updateProfile, deleteAccount }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      signUp, 
+      signIn, 
+      signOut, 
+      updateProfile, 
+      deleteAccount,
+      checkEmail,
+      resetPassword
+    }}>
       {children}
     </AuthContext.Provider>
   );
