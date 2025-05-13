@@ -1,4 +1,5 @@
 
+import React from 'react';
 import { renderHook, act } from '@testing-library/react-hooks';
 import { AuthProvider, useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -55,7 +56,9 @@ describe('AuthContext', () => {
   });
 
   it('should provide auth context', () => {
-    const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>;
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AuthProvider>{children}</AuthProvider>
+    );
     const { result } = renderHook(() => useAuth(), { wrapper });
     
     expect(result.current).toHaveProperty('user');
@@ -72,7 +75,9 @@ describe('AuthContext', () => {
       error: null
     });
     
-    const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>;
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AuthProvider>{children}</AuthProvider>
+    );
     const { result } = renderHook(() => useAuth(), { wrapper });
     
     await act(async () => {
@@ -91,7 +96,9 @@ describe('AuthContext', () => {
       error: null
     });
     
-    const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>;
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AuthProvider>{children}</AuthProvider>
+    );
     const { result } = renderHook(() => useAuth(), { wrapper });
     
     await act(async () => {
@@ -114,7 +121,9 @@ describe('AuthContext', () => {
       error: null
     });
     
-    const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>;
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AuthProvider>{children}</AuthProvider>
+    );
     const { result } = renderHook(() => useAuth(), { wrapper });
     
     await act(async () => {
