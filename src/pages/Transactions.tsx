@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -132,11 +133,30 @@ const Transactions = () => {
 
       if (error) throw error;
 
-      // Ensure client data is properly transformed
+      // Transform the data to match our TransactionWithClient type
       const transformedData = (data || []).map(transaction => {
+        // Create a proper Client object from the clients property
+        const client = transaction.clients ? {
+          id: transaction.clients.id,
+          name: transaction.clients.name,
+          user_id: user.id, // Use the current user ID since this is their client
+          created_at: transaction.created_at || new Date().toISOString(), // Use transaction date as fallback
+          email: undefined, // These fields may be undefined as they're optional in our Client type
+          phone: undefined
+        } : undefined;
+
+        // Return a properly structured TransactionWithClient object
         return {
-          ...transaction,
-          client: transaction.clients
+          id: transaction.id,
+          user_id: transaction.user_id,
+          client_id: transaction.client_id,
+          amount: transaction.amount,
+          type: transaction.type as 'income' | 'expense',
+          category: transaction.category,
+          description: transaction.description,
+          date: transaction.date,
+          created_at: transaction.created_at || new Date().toISOString(),
+          client: client
         };
       });
 
