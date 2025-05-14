@@ -11,10 +11,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   deleteAccount: () => Promise<void>;
-  resetPassword: (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => Promise<boolean>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; message: string }>;
-  verifyResetCode: (email: string, token: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
-  checkEmail: (email: string) => Promise<{exists: boolean, securityQuestion: string | null}>;
+  checkEmail: (email: string) => Promise<{exists: boolean}>;
   isProAccount: (email: string) => Promise<boolean>;
 }
 
@@ -381,20 +379,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Look for the email directly in the profiles table
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, securityquestion')
+        .select('id')
         .ilike('email', email)
         .single();
       
       if (profileData) {
         console.log('Found profile by email:', profileData);
-        return { 
-          exists: true, 
-          securityQuestion: profileData.securityquestion 
-        };
+        return { exists: true };
       }
       
       // If we didn't find the email in profiles, try to find the user in auth
-      // NOTE: This approach doesn't use the admin.listUsers with filter which was causing the error
       const { data: authData, error: authError } = await supabase.auth
         .signInWithOtp({
           email: email,
@@ -405,24 +399,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // If we reached here without error and OTP was sent, it means the user exists
       if (!authError) {
-        // Now try to get the security question
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('securityquestion')
-          .eq('email', email)
-          .single();
-          
-        return { 
-          exists: true, 
-          securityQuestion: userProfile?.securityquestion || null
-        };
+        return { exists: true };
       }
       
       console.log('Email not found in system');
-      return { exists: false, securityQuestion: null };
+      return { exists: false };
     } catch (error) {
       console.error('Error checking email:', error);
-      return { exists: false, securityQuestion: null };
+      return { exists: false };
     }
   };
   
@@ -450,7 +434,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
-  // New function to request a password reset via email
+  // Standard Supabase password reset via email
   const requestPasswordReset = async (email: string): Promise<{ success: boolean; message: string }> => {
     try {
       setLoading(true);
@@ -466,25 +450,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Request password reset using Supabase's resetPasswordForEmail
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login?reset=true`,
+        redirectTo: `${window.location.origin}/reset-password`,
       });
       
       if (error) {
         console.error('Error requesting password reset:', error);
         return { 
           success: false, 
-          message: `Erro ao enviar o código de redefinição: ${error.message}` 
+          message: `Erro ao enviar o e-mail de redefinição: ${error.message}` 
         };
       }
       
       toast({
-        title: 'Código de redefinição enviado',
-        description: 'Verifique seu e-mail para obter o código de redefinição de senha.',
+        title: 'E-mail enviado',
+        description: 'Verifique seu e-mail para obter o link de redefinição de senha.',
       });
       
       return { 
         success: true, 
-        message: 'Código de redefinição enviado com sucesso para o seu e-mail.' 
+        message: 'E-mail de redefinição enviado com sucesso.' 
       };
     } catch (error: any) {
       console.error('Error in requestPasswordReset:', error);
@@ -494,127 +478,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
     } finally {
       setLoading(false);
-    }
-  };
-
-  // New function to verify OTP token and set new password
-  const verifyResetCode = async (email: string, token: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
-    try {
-      setLoading(true);
-      
-      if (!email || !token || !newPassword) {
-        return {
-          success: false,
-          message: 'Email, código de verificação e nova senha são obrigatórios.'
-        };
-      }
-      
-      // First verify the OTP
-      const { error: verifyError } = await supabase.auth.verifyOtp({
-        email,
-        token,
-        type: 'recovery',
-      });
-      
-      if (verifyError) {
-        console.error('Error verifying reset code:', verifyError);
-        return {
-          success: false,
-          message: `Código de verificação inválido ou expirado: ${verifyError.message}`
-        };
-      }
-      
-      // Now update the password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-      
-      if (updateError) {
-        console.error('Error updating password:', updateError);
-        return {
-          success: false,
-          message: `Erro ao atualizar a senha: ${updateError.message}`
-        };
-      }
-      
-      toast({
-        title: 'Senha atualizada',
-        description: 'Sua senha foi alterada com sucesso. Você pode fazer login agora.',
-      });
-      
-      return {
-        success: true,
-        message: 'Senha atualizada com sucesso!'
-      };
-    } catch (error: any) {
-      console.error('Error in verifyResetCode:', error);
-      return {
-        success: false,
-        message: `Erro ao verificar o código e atualizar a senha: ${error.message}`
-      };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Original function to reset password using security question
-  const resetPassword = async (email: string, securityQuestion: string, securityAnswer: string, newPassword: string) => {
-    try {
-      // 1. Verify email exists and find user
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, securityquestion, securityanswer')
-        .ilike('email', email)
-        .single();
-      
-      if (profileError || !profileData) {
-        toast({
-          title: 'Erro ao redefinir senha',
-          description: 'Não foi possível encontrar seu perfil.',
-          variant: 'destructive',
-        });
-        return false;
-      }
-      
-      // 2. Verify security question and answer
-      if (profileData.securityquestion !== securityQuestion || 
-          profileData.securityanswer.toLowerCase() !== securityAnswer.toLowerCase()) {
-        toast({
-          title: 'Erro ao redefinir senha',
-          description: 'A pergunta ou resposta de segurança não estão corretas.',
-          variant: 'destructive',
-        });
-        return false;
-      }
-      
-      // 3. Update password directly
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-      
-      if (updateError) {
-        toast({
-          title: 'Erro ao redefinir senha',
-          description: updateError.message,
-          variant: 'destructive',
-        });
-        return false;
-      }
-      
-      toast({
-        title: 'Senha atualizada',
-        description: 'Sua senha foi alterada com sucesso. Você pode fazer login agora.',
-      });
-      
-      return true;
-    } catch (error: any) {
-      console.error('Erro ao redefinir senha:', error);
-      toast({
-        title: 'Erro ao redefinir senha',
-        description: error.message || 'Ocorreu um erro ao redefinir sua senha.',
-        variant: 'destructive',
-      });
-      return false;
     }
   };
 
@@ -628,9 +491,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updateProfile, 
       deleteAccount,
       checkEmail,
-      resetPassword,
       requestPasswordReset,
-      verifyResetCode,
       isProAccount
     }}>
       {children}
