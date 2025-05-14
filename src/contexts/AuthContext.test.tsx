@@ -102,7 +102,7 @@ describe('AuthContext', () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     
     await act(async () => {
-      await result.current.signUp('test@example.com', 'password', 'Test User');
+      await result.current.signUp('test@example.com', 'password', 'Test User', '123456789');
     });
     
     expect(supabase.auth.signUp).toHaveBeenCalledWith({
