@@ -13,6 +13,7 @@ import Transactions from "./pages/Transactions";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
 import * as React from "react";
 
 // Initialize QueryClient for React Query
@@ -36,6 +37,7 @@ const App = () => {
                 <Route path="/" element={<Navigate to="/login" replace />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/transactions" element={<Transactions />} />

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
@@ -28,6 +27,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
+import { supabase } from '@/lib/supabase';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'E-mail inválido' }),
@@ -48,6 +48,7 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [openResetDialog, setOpenResetDialog] = useState(false);
   const [emailNotFound, setEmailNotFound] = useState<boolean>(false);
+  const [emailChecking, setEmailChecking] = useState(false);
   
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -82,6 +83,47 @@ const Login = () => {
     }
   };
 
+  // Verify email exists in Supabase
+  const verifyEmailExists = async (email: string): Promise<boolean> => {
+    setEmailChecking(true);
+    try {
+      // Check if this email exists in the profiles table
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (data) {
+        return true;
+      }
+      
+      // If not found in profiles, try auth user lookup via OTP mechanism
+      try {
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: { shouldCreateUser: false }
+        });
+        
+        // If no error, email exists
+        if (!error) {
+          return true;
+        }
+        
+        // Otherwise check if error message indicates user doesn't exist
+        return !error.message.includes("user not found");
+      } catch (e) {
+        console.error("Error checking email via OTP:", e);
+        return false;
+      }
+    } catch (error) {
+      console.error("Error checking email:", error);
+      return false;
+    } finally {
+      setEmailChecking(false);
+    }
+  };
+
   // Handle password reset request
   const handleRequestEmailReset = async () => {
     const { email } = emailResetForm.getValues();
@@ -95,21 +137,40 @@ const Login = () => {
     
     try {
       setIsLoading(true);
-      const result = await requestPasswordReset(email);
+      setEmailNotFound(false);
       
-      if (result.success) {
+      // Verify if the email exists in Supabase
+      const emailExists = await verifyEmailExists(email);
+      
+      if (!emailExists) {
+        setEmailNotFound(true);
+        toast({
+          title: 'E-mail não encontrado',
+          description: 'Não encontramos uma conta com este e-mail.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // If email exists, request password reset via Supabase
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) {
+        console.error('Error requesting password reset:', error);
+        toast({
+          title: 'Erro ao enviar e-mail',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } else {
         toast({
           title: 'E-mail enviado',
           description: 'Verifique seu e-mail para obter o link de redefinição de senha.',
         });
         setOpenResetDialog(false);
-      } else {
-        setEmailNotFound(true);
-        toast({
-          title: 'Erro ao enviar e-mail',
-          description: result.message,
-          variant: 'destructive',
-        });
       }
     } catch (error: any) {
       console.error('Erro ao solicitar redefinição:', error);
@@ -230,12 +291,12 @@ const Login = () => {
                             type="button" 
                             className="bg-saldus-600 hover:bg-saldus-700"
                             onClick={handleRequestEmailReset}
-                            disabled={isLoading}
+                            disabled={isLoading || emailChecking}
                           >
-                            {isLoading ? (
+                            {isLoading || emailChecking ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Enviando...
+                                {emailChecking ? 'Verificando...' : 'Enviando...'}
                               </>
                             ) : (
                               'Enviar link de redefinição'
