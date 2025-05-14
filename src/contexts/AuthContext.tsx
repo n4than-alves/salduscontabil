@@ -6,13 +6,11 @@ import { useToast } from '@/hooks/use-toast';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, phone: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   deleteAccount: () => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<{ success: boolean; message: string }>;
-  checkEmail: (email: string) => Promise<{exists: boolean}>;
   isProAccount: (email: string) => Promise<boolean>;
 }
 
@@ -99,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, phone: string) => {
     try {
       setLoading(true);
       // Limpar estado de auth anterior
@@ -117,7 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
         options: {
           data: {
-            full_name: fullName, // Salva nos metadados
+            full_name: fullName,
+            phone: phone
           }
         }
       });
@@ -128,13 +127,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data.user) {
         // Criar perfil para novo usuário
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: data.user.id,
+        const { error: profileError } = await supabase.from('profiles').update({
           email,
           fullname: fullName,
+          phone: phone,
           plantype: 'free',
           planstartdate: new Date().toISOString(),
-        });
+        }).eq('id', data.user.id);
 
         if (profileError) {
           console.error('Error creating profile:', profileError);
@@ -371,45 +370,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Improved function to verify if an email exists 
-  const checkEmail = async (email: string) => {
-    try {
-      console.log('Checking email:', email);
-      
-      // Look for the email directly in the profiles table
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .ilike('email', email)
-        .single();
-      
-      if (profileData) {
-        console.log('Found profile by email:', profileData);
-        return { exists: true };
-      }
-      
-      // If we didn't find the email in profiles, try to find the user in auth
-      const { data: authData, error: authError } = await supabase.auth
-        .signInWithOtp({
-          email: email,
-          options: {
-            shouldCreateUser: false
-          }
-        });
-      
-      // If we reached here without error and OTP was sent, it means the user exists
-      if (!authError) {
-        return { exists: true };
-      }
-      
-      console.log('Email not found in system');
-      return { exists: false };
-    } catch (error) {
-      console.error('Error checking email:', error);
-      return { exists: false };
-    }
-  };
-  
   // Function to check if an account is a pro account
   const isProAccount = async (email: string): Promise<boolean> => {
     try {
@@ -433,53 +393,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   };
-  
-  // Standard Supabase password reset via email
-  const requestPasswordReset = async (email: string): Promise<{ success: boolean; message: string }> => {
-    try {
-      setLoading(true);
-      
-      // Check if email exists first
-      const emailCheck = await checkEmail(email);
-      if (!emailCheck.exists) {
-        return { 
-          success: false, 
-          message: 'Não foi encontrada uma conta com este e-mail.' 
-        };
-      }
-      
-      // Request password reset using Supabase's resetPasswordForEmail
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      
-      if (error) {
-        console.error('Error requesting password reset:', error);
-        return { 
-          success: false, 
-          message: `Erro ao enviar o e-mail de redefinição: ${error.message}` 
-        };
-      }
-      
-      toast({
-        title: 'E-mail enviado',
-        description: 'Verifique seu e-mail para obter o link de redefinição de senha.',
-      });
-      
-      return { 
-        success: true, 
-        message: 'E-mail de redefinição enviado com sucesso.' 
-      };
-    } catch (error: any) {
-      console.error('Error in requestPasswordReset:', error);
-      return { 
-        success: false, 
-        message: `Ocorreu um erro ao solicitar a redefinição de senha: ${error.message}` 
-      };
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <AuthContext.Provider value={{ 
@@ -490,8 +403,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signOut, 
       updateProfile, 
       deleteAccount,
-      checkEmail,
-      requestPasswordReset,
       isProAccount
     }}>
       {children}

@@ -17,31 +17,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue 
-} from '@/components/ui/select';
-import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
-
-const SECURITY_QUESTIONS = [
-  'Qual foi o nome do seu primeiro animal de estimação?',
-  'Qual é o nome da cidade onde você nasceu?',
-  'Qual é o nome de solteiro da sua mãe?',
-  'Qual foi o seu primeiro emprego?',
-  'Qual é o nome da escola onde você estudou?'
-];
+import { supabase } from '@/lib/supabase';
 
 const registerSchema = z.object({
   fullName: z.string().min(3, { message: 'Nome completo deve ter no mínimo 3 caracteres' }),
   email: z.string().email({ message: 'E-mail inválido' }),
+  phone: z.string().min(10, { message: 'Telefone inválido. Insira DDD + número' }),
   password: z.string().min(6, { message: 'Senha deve ter no mínimo 6 caracteres' }),
   confirmPassword: z.string(),
-  securityQuestion: z.string().min(1, { message: 'Selecione uma pergunta de segurança' }),
-  securityAnswer: z.string().min(1, { message: 'Resposta de segurança é obrigatória' }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'As senhas não conferem',
   path: ['confirmPassword'],
@@ -60,10 +44,9 @@ const Register = () => {
     defaultValues: {
       fullName: '',
       email: '',
+      phone: '',
       password: '',
       confirmPassword: '',
-      securityQuestion: '',
-      securityAnswer: '',
     },
   });
 
@@ -84,6 +67,7 @@ const Register = () => {
         options: {
           data: {
             full_name: data.fullName,
+            phone: data.phone,
           }
         }
       });
@@ -98,14 +82,13 @@ const Register = () => {
         return;
       }
       
-      // Save security question and answer
+      // Save additional profile information
       if (authData?.user) {
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
             fullname: data.fullName,
-            securityquestion: data.securityQuestion,
-            securityanswer: data.securityAnswer.toLowerCase().trim()
+            phone: data.phone,
           })
           .eq('id', authData.user.id);
           
@@ -178,6 +161,19 @@ const Register = () => {
               />
               <FormField
                 control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Telefone</FormLabel>
+                    <FormControl>
+                      <Input placeholder="(00) 00000-0000" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="password"
                 render={({ field }) => (
                   <FormItem>
@@ -197,46 +193,6 @@ const Register = () => {
                     <FormLabel>Confirme a Senha</FormLabel>
                     <FormControl>
                       <Input type="password" placeholder="••••••" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="securityQuestion"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Pergunta de Segurança</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma pergunta de segurança" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {SECURITY_QUESTIONS.map((question) => (
-                          <SelectItem key={question} value={question}>
-                            {question}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="securityAnswer"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Resposta de Segurança</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Sua resposta" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

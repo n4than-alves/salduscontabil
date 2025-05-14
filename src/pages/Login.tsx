@@ -1,5 +1,6 @@
+
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,53 +16,27 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Mail } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogClose,
-} from '@/components/ui/dialog';
-import { supabase } from '@/lib/supabase';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'E-mail inválido' }),
   password: z.string().min(6, { message: 'Senha deve ter no mínimo 6 caracteres' }),
 });
 
-const emailResetSchema = z.object({
-  email: z.string().email({ message: 'E-mail inválido' }),
-});
-
 type LoginFormValues = z.infer<typeof loginSchema>;
-type EmailResetFormValues = z.infer<typeof emailResetSchema>;
 
 const Login = () => {
-  const { signIn, user, checkEmail, requestPasswordReset } = useAuth();
+  const { signIn, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [openResetDialog, setOpenResetDialog] = useState(false);
-  const [emailNotFound, setEmailNotFound] = useState<boolean>(false);
-  const [emailChecking, setEmailChecking] = useState(false);
   
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: '',
       password: '',
-    },
-  });
-
-  const emailResetForm = useForm<EmailResetFormValues>({
-    resolver: zodResolver(emailResetSchema),
-    defaultValues: {
-      email: '',
     },
   });
 
@@ -77,117 +52,15 @@ const Login = () => {
       setIsLoading(true);
       await signIn(data.email, data.password);
       // No need to use navigate here as signIn already redirects
-    } catch (error) {
-      console.error(error);
-      setIsLoading(false);
-    }
-  };
-
-  // Verify email exists in Supabase
-  const verifyEmailExists = async (email: string): Promise<boolean> => {
-    setEmailChecking(true);
-    try {
-      // Check if this email exists in the profiles table
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (data) {
-        return true;
-      }
-      
-      // If not found in profiles, try auth user lookup via OTP mechanism
-      try {
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: { shouldCreateUser: false }
-        });
-        
-        // If no error, email exists
-        if (!error) {
-          return true;
-        }
-        
-        // Otherwise check if error message indicates user doesn't exist
-        return !error.message.includes("user not found");
-      } catch (e) {
-        console.error("Error checking email via OTP:", e);
-        return false;
-      }
-    } catch (error) {
-      console.error("Error checking email:", error);
-      return false;
-    } finally {
-      setEmailChecking(false);
-    }
-  };
-
-  // Handle password reset request
-  const handleRequestEmailReset = async () => {
-    const { email } = emailResetForm.getValues();
-    
-    if (!email) {
-      emailResetForm.setError('email', { 
-        message: 'Informe seu e-mail para continuar' 
-      });
-      return;
-    }
-    
-    try {
-      setIsLoading(true);
-      setEmailNotFound(false);
-      
-      // Verify if the email exists in Supabase
-      const emailExists = await verifyEmailExists(email);
-      
-      if (!emailExists) {
-        setEmailNotFound(true);
-        toast({
-          title: 'E-mail não encontrado',
-          description: 'Não encontramos uma conta com este e-mail.',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
-      }
-      
-      // If email exists, request password reset via Supabase
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      
-      if (error) {
-        console.error('Error requesting password reset:', error);
-        toast({
-          title: 'Erro ao enviar e-mail',
-          description: error.message,
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'E-mail enviado',
-          description: 'Verifique seu e-mail para obter o link de redefinição de senha.',
-        });
-        setOpenResetDialog(false);
-      }
     } catch (error: any) {
-      console.error('Erro ao solicitar redefinição:', error);
+      console.error('Login error:', error);
       toast({
-        title: 'Erro',
-        description: 'Ocorreu um erro ao enviar o e-mail. Tente novamente.',
+        title: 'Erro ao fazer login',
+        description: error.message || 'Ocorreu um erro durante o login',
         variant: 'destructive',
       });
-    } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleCloseDialog = () => {
-    setOpenResetDialog(false);
-    emailResetForm.reset();
-    setEmailNotFound(false);
   };
 
   if (user) {
@@ -233,80 +106,14 @@ const Login = () => {
                 )}
               />
               <div className="flex justify-end">
-                <Dialog open={openResetDialog} onOpenChange={setOpenResetDialog}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      type="button" 
-                      variant="link" 
-                      className="p-0 text-saldus-600 hover:text-saldus-500"
-                    >
-                      Esqueceu a senha?
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>
-                        Recuperação de Senha
-                      </DialogTitle>
-                      <DialogDescription>
-                        Informe seu e-mail para receber um link de redefinição de senha
-                      </DialogDescription>
-                    </DialogHeader>
-                    
-                    <Form {...emailResetForm}>
-                      <form className="space-y-4">
-                        <FormField
-                          control={emailResetForm.control}
-                          name="email"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>E-mail</FormLabel>
-                              <FormControl>
-                                <div className="flex items-center space-x-2">
-                                  <Mail className="h-4 w-4 text-gray-500" />
-                                  <Input placeholder="seu@email.com" {...field} />
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                              {emailNotFound && (
-                                <p className="text-sm text-red-500 mt-1">
-                                  E-mail não encontrado. Verifique se digitou corretamente.
-                                </p>
-                              )}
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <DialogFooter className="sm:justify-between">
-                          <DialogClose asChild>
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              onClick={handleCloseDialog}
-                            >
-                              Cancelar
-                            </Button>
-                          </DialogClose>
-                          <Button 
-                            type="button" 
-                            className="bg-saldus-600 hover:bg-saldus-700"
-                            onClick={handleRequestEmailReset}
-                            disabled={isLoading || emailChecking}
-                          >
-                            {isLoading || emailChecking ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                {emailChecking ? 'Verificando...' : 'Enviando...'}
-                              </>
-                            ) : (
-                              'Enviar link de redefinição'
-                            )}
-                          </Button>
-                        </DialogFooter>
-                      </form>
-                    </Form>
-                  </DialogContent>
-                </Dialog>
+                <Button 
+                  variant="link" 
+                  className="p-0 text-saldus-600 hover:text-saldus-500"
+                  onClick={() => navigate('/recuperar-senha')}
+                  type="button"
+                >
+                  Esqueceu a senha?
+                </Button>
               </div>
               <Button 
                 type="submit" 
